@@ -152,14 +152,7 @@ const buffers = [
     new AudioBuffer({ length: 1600, sampleRate }),
 ]
 
-for (const buffer of buffers) {
-    const data = buffer.getChannelData(0)
-    for (let i = 0; i < data.length; i++) {
-        data[i] = gen.next().value
-    }
-}
-
-let t = audioCtx.currentTime + 0.5
+let t = 0
 
 const sources = [
     new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] }),
@@ -180,8 +173,6 @@ sources[0].onended = () => {
     t += buffers[0].duration
     sources[0] = source
 }
-sources[0].start(t)
-t += buffers[0].duration
 
 sources[1].connect(audioCtx.destination)
 sources[1].onended = () => {
@@ -197,10 +188,29 @@ sources[1].onended = () => {
     t += buffers[1].duration
     sources[1] = source
 }
-sources[1].start(t)
 // const promise = audioCtx.audioWorklet.addModule("worklet.js")
 
 // Plan: compute 1600 samples at a time
 // Send the samples to the main thread for rendering on the canvas.
 // Send the samples out in 128-block chunks via AudioWorklet. (Awkward size, since 128 doesn't divide 1600.)
 // Alternatively, do the thing with chaining AudioBufferSourceNodes, the way CPAL does it.
+
+async function start() {
+    const req = await fetch("tune.ogg")
+    const buffer = await req.arrayBuffer()
+    const decoded = (await audioCtx.decodeAudioData(buffer)).getChannelData(0)
+    gen = decoded[Symbol.iterator]()
+
+    for (const buffer of buffers) {
+        const data = buffer.getChannelData(0)
+        for (let i = 0; i < data.length; i++) {
+            data[i] = gen.next().value
+        }
+    }
+    t = audioCtx.currentTime + 0.1
+    sources[0].start(t)
+    t += buffers[0].duration
+    sources[1].start(t)
+}
+
+start()
