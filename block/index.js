@@ -53,8 +53,8 @@ const osc = stream(function* (freqs) {
 })
 
 const add = stream(function* (a, b) {
-    a = maybeConst(a)
-    b = maybeConst(b)
+    a = maybeConst(a)[Symbol.iterator]()
+    b = maybeConst(b)[Symbol.iterator]()
     while (true) {
         yield a.next().value + b.next().value
     }
@@ -78,6 +78,12 @@ const zip = stream(function* (a, b) {
         const { value: y, done } = b.next()
         if (done) break
         yield [x, y]
+    }
+})
+
+const map = stream(function* (s, f) {
+    for (const x of s) {
+        yield f(x)
     }
 })
 
@@ -108,16 +114,13 @@ const take = stream(function* (a, n) {
     }
 })
 
-// let gen = mul(add(osc(c(120.1)), mul(rand, c(0.1))), c(0.5))
-let woo = osc(add(240, mul(osc(0.1), 120)))
-// let gen = mul(add(woo, mul(rand, osc(0.05))), 0.5)
+const count = stream(function* (i = 0) {
+    while (true) {
+        yield i++
+    }
+})
 
 function s(t) { return t * sampleRate }
-
-let comp = mul(rand, cycle(cat(cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))), take(c(0), s(0.5)))))
-// let gen = osc(c(200))
-
-let gen = comp[Symbol.iterator]()
 
 function render(input) {
     const data = image.data
@@ -195,11 +198,29 @@ sources[1].onended = () => {
 // Send the samples out in 128-block chunks via AudioWorklet. (Awkward size, since 128 doesn't divide 1600.)
 // Alternatively, do the thing with chaining AudioBufferSourceNodes, the way CPAL does it.
 
+
+// let gen = mul(add(osc(c(120.1)), mul(rand, c(0.1))), c(0.5))
+let woo = osc(add(240, mul(osc(0.1), 120)))
+// let comp = mul(add(woo, mul(rand, osc(0.05))), 0.5)
+// let comp = mul(rand, cycle(cat(cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))), take(c(0), s(0.5)))))
+// let comp = map(map(count(), t => t / 48000), t => ((t%(1/30))>(1/60))*2-1)
+let comp = map(count(), t => ((((t >> 10) & 42) * t) / 256) % 1 * 2 - 1)
+let gen = comp[Symbol.iterator]()
+
+const input = document.querySelector("input")
+input.onchange = e => {
+    const f = eval("t=>" + e.target.value)
+    console.log("bang", f)
+    let comp = map(count(), t => (f(t) / 256) % 1 * 2 - 1)
+    gen = comp[Symbol.iterator]()
+}
+
+
 async function start() {
-    const req = await fetch("tune.ogg")
-    const buffer = await req.arrayBuffer()
-    const decoded = (await audioCtx.decodeAudioData(buffer)).getChannelData(0)
-    gen = decoded[Symbol.iterator]()
+    // const req = await fetch("tune.ogg")
+    // const buffer = await req.arrayBuffer()
+    // const decoded = (await audioCtx.decodeAudioData(buffer)).getChannelData(0)
+    // gen = decoded[Symbol.iterator]()
 
     for (const buffer of buffers) {
         const data = buffer.getChannelData(0)
