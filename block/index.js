@@ -204,17 +204,35 @@ let woo = osc(add(240, mul(osc(0.1), 120)))
 // let comp = mul(add(woo, mul(rand, osc(0.05))), 0.5)
 // let comp = mul(rand, cycle(cat(cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))), take(c(0), s(0.5)))))
 // let comp = map(map(count(), t => t / 48000), t => ((t%(1/30))>(1/60))*2-1)
-let comp = map(count(), t => ((((t >> 10) & 42) * t) / 256) % 1 * 2 - 1)
+let f = t => 0 // ((t >> 10) & 42) * t
+let comp = map(count(), t => (f(t) / 256) % 1 * 2 - 1)
 let gen = comp[Symbol.iterator]()
 
 const input = document.querySelector("input")
 input.onchange = e => {
-    const f = eval("t=>" + e.target.value)
+    f = eval("t=>" + e.target.value)
     console.log("bang", f)
-    let comp = map(count(), t => (f(t) / 256) % 1 * 2 - 1)
-    gen = comp[Symbol.iterator]()
+    // let comp = map(count(), t => (f(t) / 256) % 1 * 2 - 1)
+    // gen = comp[Symbol.iterator]()
 }
 
+document.querySelector("button").onclick = e => {
+    input.value = generateExpression(4)
+    input.dispatchEvent(new Event("change"))
+}
+
+function generateExpression(depth) {
+    const ops = ["<<",">>","+","*","%","|","&","^"]
+    const op = ops[Math.floor(Math.random() * ops.length)]
+    if (depth === 0) {
+        if (Math.random() < 0.5) {
+            return "t"
+        } else {
+            return "" + Math.floor(Math.random() * 256)
+        }
+    }
+    return `(${generateExpression(depth-1)}${op}${generateExpression(depth-1)})`
+}
 
 async function start() {
     // const req = await fetch("tune.ogg")
