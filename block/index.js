@@ -65,6 +65,12 @@ const cat = stream(function* (a, b) {
     yield* b
 })
 
+const cycle = stream(function* (s) {
+    while (true) {
+        yield* s
+    }
+})
+
 const zip = stream(function* (a, b) {
     a = a[Symbol.iterator]()
     b = b[Symbol.iterator]()
@@ -108,7 +114,7 @@ let woo = osc(add(240, mul(osc(0.1), 120)))
 
 function s(t) { return t * sampleRate }
 
-let comp = mul(rand, cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))))
+let comp = mul(rand, cycle(cat(cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))), take(c(0), s(0.5)))))
 // let gen = osc(c(200))
 
 let gen = comp[Symbol.iterator]()
