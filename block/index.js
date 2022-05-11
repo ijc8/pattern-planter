@@ -1,5 +1,3 @@
-console.log("hi")
-
 const canvas = document.querySelector("canvas")
 const ctx = canvas.getContext("2d")
 ctx.fillRect(0, 0, 10, 10)
@@ -16,57 +14,93 @@ function isIterable(obj) {
     return typeof obj[Symbol.iterator] === 'function'
 }
 
+class Stream {
+    constructor(iterable) {
+        this.iterable = iterable
+    }
+
+    [Symbol.iterator]() {
+        return this.iterable[Symbol.iterator]()
+    }
+}
+
+class FunctionStream extends Stream {
+    constructor(fn) {
+        super()
+        this.fn = fn
+    }
+
+    [Symbol.iterator]() {
+        return this.fn()
+    }
+}
+
+function stream(generatorFunction) {
+    return (...args) => new FunctionStream(() => generatorFunction(...args))
+}
+
 function maybeConst(x) {
     return isIterable(x) ? x : c(x)
 }
 
-function* osc(freqs) {
+const osc = stream(function* (freqs) {
     freqs = maybeConst(freqs)
     let phase = 0
-    while (true) {
+    for (const freq of freqs) {
         yield Math.sin(phase)
-        phase += 2*Math.PI*freqs.next().value/sampleRate
+        phase += 2*Math.PI*freq/sampleRate
     }
-}
+})
 
-function* add(a, b) {
+const add = stream(function* (a, b) {
     a = maybeConst(a)
     b = maybeConst(b)
     while (true) {
         yield a.next().value + b.next().value
     }
-}
+})
 
-function* cat(a, b) {
+const cat = stream(function* (a, b) {
     yield* a
     yield* b
-}
+})
 
-function* mul(a, b) {
+const zip = stream(function* (a, b) {
+    a = a[Symbol.iterator]()
+    b = b[Symbol.iterator]()
+    for (const x of a) {
+        const { value: y, done } = b.next()
+        if (done) break
+        yield [x, y]
+    }
+})
+
+const mul = stream(function* (a, b) {
     a = maybeConst(a)
     b = maybeConst(b)
-    while (true) {
-        yield a.next().value * b.next().value
+    for (const [x, y] of zip(a, b)) {
+        yield x * y
     }
-}
+})
 
-function* c(x) {
+const c = stream(function* (x) {
     while (true) {
         yield x
     }
-}
+})
 
-const rand = (function* () {
+const rand = new Stream(function* () {
     while (true) {
         yield Math.random()*2-1
     }
-})()
+}())
 
-function* take(a, n) {
+const take = stream(function* (a, n) {
+    a = a[Symbol.iterator]()
     for (let i = 0; i < n; i++) {
         yield a.next().value
     }
-}
+})
 
 // let gen = mul(add(osc(c(120.1)), mul(rand, c(0.1))), c(0.5))
 let woo = osc(add(240, mul(osc(0.1), 120)))
@@ -74,8 +108,10 @@ let woo = osc(add(240, mul(osc(0.1), 120)))
 
 function s(t) { return t * sampleRate }
 
-let gen = mul(rand, cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))))
+let comp = mul(rand, cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))))
 // let gen = osc(c(200))
+
+let gen = comp[Symbol.iterator]()
 
 function render(input) {
     const data = image.data
