@@ -1,17 +1,5 @@
 import { codeGen } from "shift-codegen"
 
-console.log(codeGen({
-  type: "BinaryExpression",
-  left: {
-    type: "IdentifierExpression",
-    name: "t",
-  },
-  operator: ">>",
-  right: {
-    type: "LiteralNumericExpression",
-    value: 2,
-  },
-}))
 
 const canvas = document.querySelector("canvas")!
 const ctx = canvas.getContext("2d")!
@@ -107,21 +95,66 @@ input.onchange = e => {
 }
 
 document.querySelector("button")!.onclick = e => {
-    input.value = generateExpression(5)
+    input.value = codeGen(generateExpression(5))
     input.dispatchEvent(new Event("change"))
 }
 
-function generateExpression(depth: number): string {
-    const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
-    const op = ops[Math.floor(Math.random() * ops.length)]
-    if (depth === 0) {
-        if (Math.random() < 0.5) {
-            return "t"
-        } else {
-            return "" + Math.floor(Math.random() * 256)
-        }
+function generateAtom() {
+    const p = Math.random()
+    if (p < 0.4) {
+        return { type: "IdentifierExpression", name: "t" }
+    } else {
+        // Larger numbers should be less likely. (Also, we skip 0.)
+        return { type: "LiteralNumericExpression", value: Math.floor(Math.random() * (1/(p-0.5))) + 1 }
     }
-    return `(${generateExpression(depth-1)}${op}${generateExpression(depth-1)})`
+}
+
+function generateExpression(depth: number): any {
+    const p = Math.random()
+    if (depth === 0 || p < 0.1) {
+        return generateAtom()
+    } else if (p < 0.2) {
+        return generateUnaryExpression(depth)
+    } else if (p < 0.25) {
+        return generateTernaryExpression(depth)
+    } else {
+        return generateBinaryExpression(depth)
+    }
+}
+
+function generateUnaryExpression(depth: number) {
+    return {
+        type: "UnaryExpression",
+        operator: "~",
+        operand: generateExpression(depth-1)
+    }
+}
+
+function generateTernaryExpression(depth: number) {
+    const ops = ["<","<=",">=",">","==","!="]
+    const operator = ops[Math.floor(Math.random() * ops.length)]
+    return {
+        type: "ConditionalExpression",
+        test: {
+            type: "BinaryExpression",
+            left: generateExpression(depth-1),
+            operator,
+            right: generateExpression(depth-1),
+        },
+        consequent: generateExpression(depth-1),
+        alternate: generateExpression(depth-1),
+    }
+}
+
+function generateBinaryExpression(depth: number) {
+    const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
+    const operator = ops[Math.floor(Math.random() * ops.length)]
+    return {
+        type: "BinaryExpression",
+        left: generateExpression(depth-1),
+        operator,
+        right: generateExpression(depth-1),
+    }
 }
 
 async function start() {
