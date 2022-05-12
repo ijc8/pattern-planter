@@ -199,6 +199,7 @@ let f = (t: number) => 0
 
 const gen = (function* () {
     for (let t = 0;; t++) {
+        if (t % 48000 === 0) console.log(t)
         yield mod(f(t) / 256, 1) * 2 - 1
     }
 })()
@@ -210,7 +211,7 @@ input.onchange = e => {
 }
 
 document.querySelector("button")!.onclick = () => {
-    input.value = codeGen(generateExpression(4, true))
+    input.value = codeGen(generateExpression2(15))
     input.dispatchEvent(new Event("change"))
 }
 
@@ -274,6 +275,56 @@ function generateTernaryExpression(depth: number, mustUseTime=false) {
         alternate: generateExpression(depth-1, mustUseTime && (pos === 3)),
     }
 }
+
+function getDescendants(root: any) {
+    const stack = [root]
+    const descendants = []
+    while (stack.length) {
+        const node = stack.pop()
+        descendants.push(node)
+        for (const child of children(node)) {
+            stack.push(child)
+        }
+    }
+    return descendants
+}
+
+function growExpression(expr: any) {
+    const nodes = getDescendants(expr)
+    console.log("nodes", nodes)
+    const dst = nodes[Math.floor(Math.random() * nodes.length)]
+    const copy = JSON.parse(JSON.stringify(dst))
+    console.log("chose", dst)
+    if (Math.random() < 0.75) {
+        const pos = Math.random() < 0.5
+        const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
+        const operator = ops[Math.floor(Math.random() * ops.length)]
+        replaceObject(dst, {
+            type: "BinaryExpression",
+            left: pos ? copy : generateAtom(),
+            operator,
+            right: pos ? generateAtom() : copy,
+        })
+    } else {
+        replaceObject(dst, {
+            type: "UnaryExpression",
+            operator: "~",
+            operand: copy,
+        })
+    }
+}
+
+function generateExpression2(n: number) {
+    const expr = { type: "IdentifierExpression", name: "t" }
+    for (let i = 0; i < n; i++) {
+        growExpression(expr)
+    }
+    return expr
+}
+a = generateExpression(3, true)
+console.log(codeGen(a))
+growExpression(a)
+console.log(codeGen(a))
 
 async function start() {
     // const req = await fetch("tune.ogg")
