@@ -12,6 +12,12 @@ function weightedChoice<T extends { weight: number }>(choices: T[]) {
     return undefined
 }
 
+function seemsAudible(f: (t: number) => number) {
+    const testValues = [13, 24, 48001, 1234567]
+    const outputs = testValues.map(f)
+    return outputs.some(x => x != outputs[0])
+}
+
 function children(node: any) {
     if (node.type === "ConditionalExpression") {
         return [node.test, node.consequent, node.alternate]
@@ -103,16 +109,17 @@ function mod(n: number, m: number) {
     return ((n % m) + m) % m;
 }
 
-let f = (_: number) => 0
+let f = (_: number) => -1
 let t = 0
 function next() {
-    return mod((f(t++)|0) / 256, 1) * 2 - 1
+    return f(t++)
 }
 
 const input = document.querySelector("input")!
 input.onchange = e => {
     if (getExpression()) {
-        f = eval("t=>" + (e.target as HTMLInputElement).value)
+        const g = eval("t=>" + (e.target as HTMLInputElement).value)
+        f = (t: number) => mod((g(t)|0) / 256, 1) * 2 - 1
     }
 }
 
@@ -140,7 +147,7 @@ autoButton.onclick = () => {
 }
 
 async function runAuto() {
-    if (input.value === "0") {
+    if (input.value === "0" || !getExpression(false)) {
         resetButton.click()
     }
     while (autoPromise) {
@@ -155,21 +162,21 @@ async function runAuto() {
         const button = weightedChoice(choices)!.button
         button.click()
         button.classList.add("clicked")
-        await sleep(100)
+        await sleep(50)
         button.classList.remove("clicked")
-        if (input.value.includes("t")) {
+        if (seemsAudible(f)) {
             await sleep(400 + Math.random() * 1500)
         }
     }
 }
 
-function getExpression() {
+function getExpression(warn=true) {
     let mod
     try {
         mod = parseModule(input.value)
     } catch {}
     if (!mod || mod.items.length !== 1 || mod.items[0].type !== "ExpressionStatement") {
-        alert("Please enter a valid expression.")
+        if (warn) alert("Please enter a valid expression.")
         return null
     }
     return mod.items[0].expression
