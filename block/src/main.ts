@@ -149,7 +149,7 @@ const buffers = [
     new AudioBuffer({ length: 1600, sampleRate }),
 ]
 
-let t = 0
+let schedTime = 0
 
 const sources = [
     new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] }),
@@ -160,14 +160,14 @@ sources[0].connect(audioCtx.destination)
 sources[0].onended = () => {
     const data = buffers[0].getChannelData(0)
     for (let i = 0; i < data.length; i++) {
-        data[i] = gen.next().value
+        data[i] = next()
     }
     render(data)
     const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] })
     source.connect(audioCtx.destination)
     source.onended = sources[0].onended
-    source.start(t)
-    t += buffers[0].duration
+    source.start(schedTime)
+    schedTime += buffers[0].duration
     sources[0] = source
 }
 
@@ -175,14 +175,14 @@ sources[1].connect(audioCtx.destination)
 sources[1].onended = () => {
     const data = buffers[1].getChannelData(0)
     for (let i = 0; i < data.length; i++) {
-        data[i] = gen.next().value
+        data[i] = next()
     }
     render(data)
     const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[1] })
     source.connect(audioCtx.destination)
     source.onended = sources[1].onended
-    source.start(t)
-    t += buffers[1].duration
+    source.start(schedTime)
+    schedTime += buffers[1].duration
     sources[1] = source
 }
 // const promise = audioCtx.audioWorklet.addModule("worklet.js")
@@ -197,13 +197,10 @@ function mod(n: number, m: number) {
 }
 
 let f = (t: number) => 0
-
-const gen = (function* () {
-    for (let t = 0;; t++) {
-        if (t % 48000 === 0) console.log(t)
-        yield mod((f(t)|0) / 256, 1) * 2 - 1
-    }
-})()
+let t = 0
+function next() {
+    return mod((f(t++)|0) / 256, 1) * 2 - 1
+}
 
 const input = document.querySelector("input")!
 input.onchange = e => {
@@ -301,38 +298,82 @@ function getDescendants(root: any) {
     return descendants
 }
 
-function growExpression(expr: any) {
-    const nodes = getDescendants(expr)
-    console.log("nodes", nodes)
-    const dst = nodes[Math.floor(Math.random() * nodes.length)]
-    const copy = JSON.parse(JSON.stringify(dst))
-    console.log("chose", dst)
-    if (Math.random() < 0.75) {
+interface Rule {
+    name: string
+    type?: string
+    apply: (node: any) => any
+    weight: number
+}
+
+const growRules = [{
+    // expr -> expr <op> atom / atom <op> expr
+    name: "growBinaryOp",
+    apply(node: any) {
         const pos = Math.random() < 0.5
         const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
         const operator = ops[Math.floor(Math.random() * ops.length)]
-        replaceObject(dst, {
+        return {
             type: "BinaryExpression",
-            left: pos ? copy : generateAtom(),
+            left: pos ? node : generateAtom(),
             operator,
-            right: pos ? generateAtom() : copy,
-        })
-    } else {
-        replaceObject(dst, {
-            type: "UnaryExpression",
-            operator: "~",
-            operand: copy,
-        })
+            right: pos ? generateAtom() : node,
+        }
+    },
+    weight: 3,
+}, {
+    // expr -> ~expr
+    name: "growUnaryOp",
+    apply: (node: any) => ({
+        type: "UnaryExpression",
+        operator: "~",
+        operand: node,
+    }),
+    weight: 1,
+}]
+
+function applyRandomRule(expr: any, rules: Rule[]) {
+    // Get all nodes to which at least one rule applies.
+    const nodes = getDescendants(expr).filter(node => rules.some(
+        rule => !rule.type || rule.type === node.type
+    ))
+    // Randomly select node.
+    const dst = nodes[Math.floor(Math.random() * nodes.length)]
+    const copy = JSON.parse(JSON.stringify(dst))
+    // Randomly select applicable rule using weights.
+    const applicable = rules.filter(rule => !rule.type || rule.type === dst.type)
+    const totalWeight = applicable.reduce((acc, rule) => acc + rule.weight, 0)
+    let p = Math.random()
+    let rule
+    for (rule of applicable) {
+        const prob = rule.weight / totalWeight
+        if (p < prob) break
+        p -= prob
     }
+    // Apply selected rule.
+    if (rule === undefined) {
+        console.log("No matching rules!")
+        return
+    }
+    console.log("Applying rule:", rule.name)
+    replaceObject(dst, rule.apply(copy))
 }
 
-function generateExpression2(n: number) {
-    const expr = { type: "IdentifierExpression", name: "t" }
-    for (let i = 0; i < n; i++) {
-        growExpression(expr)
-    }
-    return expr
+function growExpression(expr: any) {
+    applyRandomRule(expr, growRules)
 }
+
+const shrinkRules = [{
+    type: "BinaryExpression",
+    apply: (node: any) => Math.random() < 0.5 ? node.left : node.right,
+}, {
+    type: "UnaryExpression",
+    apply: (node: any) => node.operand,
+}]
+
+function shrinkExpression(expr: any) {
+    // TODO
+}
+
 a = generateExpression(3, true)
 console.log(codeGen(a))
 growExpression(a)
@@ -347,13 +388,13 @@ async function start() {
     for (const buffer of buffers) {
         const data = buffer.getChannelData(0)
         for (let i = 0; i < data.length; i++) {
-            data[i] = gen.next().value
+            data[i] = next()
         }
     }
-    t = audioCtx.currentTime + 0.1
-    sources[0].start(t)
-    t += buffers[0].duration
-    sources[1].start(t)
+    schedTime = audioCtx.currentTime + 0.1
+    sources[0].start(schedTime)
+    schedTime += buffers[0].duration
+    sources[1].start(schedTime)
 }
 
 start()
