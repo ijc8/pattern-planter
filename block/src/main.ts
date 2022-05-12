@@ -204,8 +204,10 @@ function next() {
 
 const input = document.querySelector("input")!
 input.onchange = e => {
-    f = eval("t=>" + (e.target as HTMLInputElement).value)
-    console.log("bang", f)
+    if (getExpression()) {
+        f = eval("t=>" + (e.target as HTMLInputElement).value)
+        console.log("bang", f)
+    }
 }
 
 document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
@@ -213,15 +215,36 @@ document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
     input.dispatchEvent(new Event("change"))
 }
 
-document.querySelector<HTMLButtonElement>("#grow")!.onclick = () => {
-    const mod = parseModule(input.value)
-    if (mod.items.length !== 1 || mod.items[0].type !== "ExpressionStatement") {
+function getExpression() {
+    let mod
+    try {
+        mod = parseModule(input.value)
+    } catch {}
+    if (!mod || mod.items.length !== 1 || mod.items[0].type !== "ExpressionStatement") {
         alert("Please enter a valid expression.")
+        return null
     }
-    const expr = mod.items[0].expression
-    growExpression(expr)
+    return mod.items[0].expression
+}
+
+function updateExpressionWithRules(rules: Rule[]) {
+    const expr = getExpression()
+    if (!expr) return
+    applyRandomRule(expr, rules)
     input.value = codeGen(expr)
     input.dispatchEvent(new Event("change"))
+}
+
+document.querySelector<HTMLButtonElement>("#grow")!.onclick = () => {
+    updateExpressionWithRules(growRules)
+}
+
+document.querySelector<HTMLButtonElement>("#shrink")!.onclick = () => {
+    updateExpressionWithRules(shrinkRules)
+}
+
+document.querySelector<HTMLButtonElement>("#change")!.onclick = () => {
+    updateExpressionWithRules(changeRules)
 }
 
 function generateExpression(depth: number, mustUseTime=false): any {
@@ -237,14 +260,18 @@ function generateExpression(depth: number, mustUseTime=false): any {
     }
 }
 
+function generateConstant() {
+    // Larger numbers should be less likely. (Also, we skip 0.)
+    return Math.floor(Math.random() * (1/Math.random())) + 1
+}
+
 function generateAtom(mustUseTime=false) {
     const p = Math.random()
     const probT = 0.4
     if (mustUseTime || p < probT) {
         return { type: "IdentifierExpression", name: "t" }
     } else {
-        // Larger numbers should be less likely. (Also, we skip 0.)
-        return { type: "LiteralNumericExpression", value: Math.floor(Math.random() * ((1-probT)/(p-probT))) + 1 }
+        return { type: "LiteralNumericExpression", value: generateConstant() }
     }
 }
 
@@ -305,13 +332,14 @@ interface Rule {
     weight: number
 }
 
+const BINARY_OPS = ["<<",">>","+","-","*","/","%","|","&","^"]
+
 const growRules = [{
-    // expr -> expr <op> atom / atom <op> expr
+    // expr -> `expr <op> atom` or `atom <op> expr`
     name: "growBinaryOp",
     apply(node: any) {
         const pos = Math.random() < 0.5
-        const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
-        const operator = ops[Math.floor(Math.random() * ops.length)]
+        const operator = BINARY_OPS[Math.floor(Math.random() * BINARY_OPS.length)]
         return {
             type: "BinaryExpression",
             left: pos ? node : generateAtom(),
@@ -321,7 +349,7 @@ const growRules = [{
     },
     weight: 3,
 }, {
-    // expr -> ~expr
+    // x -> ~x
     name: "growUnaryOp",
     apply: (node: any) => ({
         type: "UnaryExpression",
@@ -337,47 +365,92 @@ function applyRandomRule(expr: any, rules: Rule[]) {
         rule => !rule.type || rule.type === node.type
     ))
     // Randomly select node.
+    if (nodes.length === 0) {
+        console.log("No matching nodes!")
+        return
+    }
     const dst = nodes[Math.floor(Math.random() * nodes.length)]
     const copy = JSON.parse(JSON.stringify(dst))
     // Randomly select applicable rule using weights.
     const applicable = rules.filter(rule => !rule.type || rule.type === dst.type)
     const totalWeight = applicable.reduce((acc, rule) => acc + rule.weight, 0)
     let p = Math.random()
-    let rule
+    let rule: Rule
     for (rule of applicable) {
         const prob = rule.weight / totalWeight
         if (p < prob) break
         p -= prob
     }
     // Apply selected rule.
-    if (rule === undefined) {
-        console.log("No matching rules!")
-        return
-    }
-    console.log("Applying rule:", rule.name)
-    replaceObject(dst, rule.apply(copy))
-}
-
-function growExpression(expr: any) {
-    applyRandomRule(expr, growRules)
+    console.log("Applying rule:", rule!.name)
+    replaceObject(dst, rule!.apply(copy))
+    console.log(dst)
 }
 
 const shrinkRules = [{
+    // x <op> y -> `x` or `y`
+    // NOTE: Currently this applies anywhere in the tree, so it could lop off most of the expression
+    // in one step. Might be better if it only applies to BinaryExpressions containing a leaf node.
+    name: "shrinkBinaryOp",
     type: "BinaryExpression",
     apply: (node: any) => Math.random() < 0.5 ? node.left : node.right,
+    weight: 1,
 }, {
+    // ~x -> x
+    name: "shrinkUnaryOp",
     type: "UnaryExpression",
     apply: (node: any) => node.operand,
+    weight: 1,
 }]
 
-function shrinkExpression(expr: any) {
-    // TODO
-}
-
-a = generateExpression(3, true)
-console.log(codeGen(a))
-growExpression(a)
-console.log(codeGen(a))
+const changeRules = [{
+    // x <op> y -> x <different op> y
+    name: "switchBinaryOp",
+    type: "BinaryExpression",
+    apply: (node: any) => ({
+        ...node,
+        operator: BINARY_OPS.filter(op => op !== node.operator)[Math.floor(Math.random() * (BINARY_OPS.length - 1))]
+    }),
+    weight: 2,
+}, {
+    // x <op> y -> y <op> x
+    // NOTE: Currently this also applies to commutative operators: +, *, &, |, ^. Would be nice to exclude those.
+    name: "swapBinaryOp",
+    type: "BinaryExpression",
+    apply: (node: any) => ({
+        ...node,
+        left: node.right,
+        right: node.left,
+    }),
+    weight: 1,
+}, {
+    // t -> <constant>
+    name: "variableToConstant",
+    type: "IdentifierExpression",
+    apply: (node: any) => ({
+        type: "LiteralNumericExpression",
+        value: generateConstant(),
+    }),
+    weight: 1,
+}, {
+    // <constant> -> t
+    name: "constantToVariable",
+    type: "LiteralNumericExpression",
+    apply: (node: any) => ({
+        type: "IdentifierExpression",
+        name: "t",
+    }),
+    weight: 1,
+}, {
+    // <constant> -> <constant>
+    name: "switchConstant",
+    type: "LiteralNumericExpression",
+    apply: (node: any) => ({
+        type: "LiteralNumericExpression",
+        value: generateConstant(),
+    }),
+    weight: 1,
+}]
 
 async function start() {
     // const req = await fetch("tune.ogg")
