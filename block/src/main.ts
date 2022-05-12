@@ -1,8 +1,18 @@
 import { codeGen } from "shift-codegen"
 import { parseModule } from "shift-parser";
 
+function weightedChoice<T extends { weight: number }>(choices: T[]) {
+    const totalWeight = choices.reduce((acc, choice) => acc + choice.weight, 0)
+    let p = Math.random()
+    for (const choice of choices) {
+        const prob = choice.weight / totalWeight
+        if (p < prob) return choice
+        p -= prob
+    }
+    return undefined
+}
+
 function children(node: any) {
-    // return node.children
     if (node.type === "ConditionalExpression") {
         return [node.test, node.consequent, node.alternate]
     } else if (node.type === "BinaryExpression") {
@@ -116,8 +126,8 @@ function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-const autoButton = document.querySelector<HTMLButtonElement>("#auto")!
 let autoPromise: Promise<void> | true | null
+const autoButton = document.querySelector<HTMLButtonElement>("#auto")!
 autoButton.onclick = () => {
     if (!autoPromise) {
         autoButton.classList.add("clicked")
@@ -134,15 +144,22 @@ async function runAuto() {
         resetButton.click()
     }
     while (autoPromise) {
-        const choices = ["grow", "change", "shrink"]
-        const choice = choices[Math.floor(Math.random() * choices.length)]
-        console.log(choice)
-        const button = document.querySelector(`#${choice}`) as HTMLButtonElement
+        const choices = [{ button: growButton, weight: 0.5 }]
+        if (input.value !== "t") {
+            choices.push({ button: changeButton, weight: 0.4 })
+            choices.push({ button: resetButton, weight: 0.01 })
+            if (input.value.includes("t")) {
+                choices.push({ button: shrinkButton, weight: 0.09 })
+            }
+        }
+        const button = weightedChoice(choices)!.button
         button.click()
         button.classList.add("clicked")
         await sleep(100)
         button.classList.remove("clicked")
-        await sleep(400 + Math.random() * 1500)
+        if (input.value.includes("t")) {
+            await sleep(400 + Math.random() * 1500)
+        }
     }
 }
 
@@ -166,15 +183,18 @@ function updateExpressionWithRules(rules: Rule[]) {
     input.dispatchEvent(new Event("change"))
 }
 
-document.querySelector<HTMLButtonElement>("#grow")!.onclick = () => {
+const growButton = document.querySelector<HTMLButtonElement>("#grow")!
+growButton.onclick = () => {
     updateExpressionWithRules(growRules)
 }
 
-document.querySelector<HTMLButtonElement>("#shrink")!.onclick = () => {
+const shrinkButton = document.querySelector<HTMLButtonElement>("#shrink")!
+shrinkButton.onclick = () => {
     updateExpressionWithRules(shrinkRules)
 }
 
-document.querySelector<HTMLButtonElement>("#change")!.onclick = () => {
+const changeButton = document.querySelector<HTMLButtonElement>("#change")!
+changeButton.onclick = () => {
     updateExpressionWithRules(changeRules)
 }
 
@@ -304,17 +324,10 @@ function applyRandomRule(expr: any, rules: Rule[]) {
     const copy = JSON.parse(JSON.stringify(dst))
     // Randomly select applicable rule using weights.
     const applicable = rules.filter(rule => !rule.type || rule.type === dst.type)
-    const totalWeight = applicable.reduce((acc, rule) => acc + rule.weight, 0)
-    let p = Math.random()
-    let rule: Rule
-    for (rule of applicable) {
-        const prob = rule.weight / totalWeight
-        if (p < prob) break
-        p -= prob
-    }
+    const rule = weightedChoice(applicable)!
     // Apply selected rule.
-    console.log("Applying rule:", rule!.name)
-    replaceObject(dst, rule!.apply(copy))
+    console.log("Applying rule:", rule.name)
+    replaceObject(dst, rule.apply(copy))
 }
 
 const shrinkRules = [{
