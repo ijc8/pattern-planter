@@ -46,7 +46,6 @@ function render(input: Float32Array) {
 }
 
 const audioCtx = new AudioContext({ sampleRate })
-console.log(audioCtx)
 
 const buffers = [
     new AudioBuffer({ length: 1600, sampleRate }),
@@ -89,12 +88,6 @@ sources[1].onended = () => {
     schedTime += buffers[1].duration
     sources[1] = source
 }
-// const promise = audioCtx.audioWorklet.addModule("worklet.js")
-
-// Plan: compute 1600 samples at a time
-// Send the samples to the main thread for rendering on the canvas.
-// Send the samples out in 128-block chunks via AudioWorklet. (Awkward size, since 128 doesn't divide 1600.)
-// Alternatively, do the thing with chaining AudioBufferSourceNodes, the way CPAL does it.
 
 function mod(n: number, m: number) {
     return ((n % m) + m) % m;
@@ -110,7 +103,6 @@ const input = document.querySelector("input")!
 input.onchange = e => {
     if (getExpression()) {
         f = eval("t=>" + (e.target as HTMLInputElement).value)
-        console.log("bang", f)
     }
 }
 
@@ -295,7 +287,6 @@ function applyRandomRule(expr: any, rules: Rule[]) {
     // Apply selected rule.
     console.log("Applying rule:", rule!.name)
     replaceObject(dst, rule!.apply(copy))
-    console.log(dst)
 }
 
 const shrinkRules = [{
@@ -364,12 +355,7 @@ const changeRules = [{
 }]
 
 async function start() {
-    // const req = await fetch("tune.ogg")
-    // const buffer = await req.arrayBuffer()
-    // const decoded = (await audioCtx.decodeAudioData(buffer)).getChannelData(0)
-    // gen = decoded[Symbol.iterator]()
-    console.log("starting")
-    
+   
     for (const buffer of buffers) {
         const data = buffer.getChannelData(0)
         for (let i = 0; i < data.length; i++) {
@@ -377,10 +363,8 @@ async function start() {
         }
     }
     schedTime = audioCtx.currentTime + 0.1
-    console.log("Start 0")
     sources[0].start(schedTime)
     schedTime += buffers[0].duration
-    console.log("Start 1")
     sources[1].start(schedTime)
 }
 

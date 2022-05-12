@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "shift-codegen": "^8.0.0",
-    "shift-parser": "^8.0.0",
-    "zhang-shasha": "^1.0.0"
+    "shift-parser": "^8.0.0"
   }
 }
