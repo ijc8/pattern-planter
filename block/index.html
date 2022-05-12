@@ -2,23 +2,50 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link href="https://fonts.googleapis.com/css2?family=Recursive&display=swap" rel="stylesheet">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite App</title>
+    <title>Blocks</title>
     <style>
       body {
-        background-color: black;
+        background-color: #222;
+      }
+
+      #app {
+        margin-left: auto;
+        margin-right: auto;
+        width: 800px;
       }
 
       canvas {
-        width: 500px;
-        height: 500px;
-        border: 1px solid white;
+        width: 800px;
+        height: 800px;
         image-rendering: pixelated;
       }
 
+      #buttons {
+        display: flex;
+        width: 100%;
+      }
+
+      button {
+        display: block;
+        flex-grow: 1;
+        padding: 10px;
+        font-family: 'Recursive', monospace;
+        background: black;
+        color: white;
+        font-size: larger;
+      }
+
       input {
-        width: 500px;
+        width: 100%;
+        font-family: 'Recursive', monospace;
+        background: black;
+        color: white;
+        outline: none;
+        margin: 0;
+        border: none;
+        font-size: larger;
       }
     </style>
   </head>
@@ -28,10 +55,13 @@
       <br/>
       <input type="text" value="0" autocomplete="off" />
       <br/>
-      <button id="reset">Reset</button>
-      <button id="grow">Grow</button>
-      <button id="shrink">Shrink</button>
-      <button id="change">Change</button>
+      <div id="buttons">
+        <button id="auto">Auto</button>
+        <button id="reset">Reset</button>
+        <button id="grow">Grow</button>
+        <button id="change">Change</button>
+        <button id="shrink">Shrink</button>
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

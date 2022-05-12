@@ -1,21 +1,5 @@
 import { codeGen } from "shift-codegen"
 import { parseModule } from "shift-parser";
-import { distance, mapping } from "zhang-shasha"
-
-// var a = {
-//     label: 'a',
-//     children: [
-//         {label: 'b', children: []},
-//         {label: 'c', children: []}
-//     ]
-// }
-
-// var b = {
-//     label: 'a',
-//     children: [
-//         {label: 'b', children: []}
-//     ]
-// }
 
 function children(node: any) {
     // return node.children
@@ -30,92 +14,12 @@ function children(node: any) {
     }
 }
 
-function insertCost() { return 1 }
-function removeCost(node: any) {
-    // if (node.type === "BinaryExpression") return Infinity
-    return 1
-}
-function updateCost(from: any, to: any) {
-    // return from.label === to.label ? 0 : 1
-    if (from.type === to.type) {
-        if (to.type === "BinaryExpression" && from.operator !== to.operator) {
-            return 1
-        }
-        return 0
-    }
-    if ([from.type, to.type].includes("BinaryExpression")) return Infinity
-    if ([from.type, to.type].includes("ConditionalExpression")) return Infinity
-    return 1
-}
-
-// console.log("dist", distance(a, b, children, insertCost, removeCost, updateCost))
-// console.log(mapping(a, b, children, insertCost, removeCost, updateCost))
-
-let a = generateExpression(3, true)
-const b = generateExpression(3, true)
-console.log(codeGen(a), "->", codeGen(b))
-console.log(a)
-console.log(b)
-console.log(JSON.parse(JSON.stringify(mapping(a, b, children, insertCost, removeCost, updateCost))))
-// console.log(mapping(b, a, children, insertCost, removeCost, updateCost))
-
 function replaceObject(target: any, source: any) {
     for (const prop of Object.getOwnPropertyNames(target)) {
         delete target[prop]
     }
     Object.assign(target, source)
 }
-
-// Execute the first instruction.
-let m = mapping(a, b, children, insertCost, removeCost, updateCost)
-let i = 0
-
-function executeEdit(m: any[]) {
-    for (let i = 0; i < m.length; i++) {
-        if (m[i].type === "match") {
-            console.log("Got a match, doing nothing.")
-        } else {
-            console.log("Got", JSON.parse(JSON.stringify(m[i])))
-            if (m[i].type === "update") {
-                console.log("Performing update")
-                if (m[i].t1.type !== m[i].t2.type) {
-                    replaceObject(m[i].t1, m[i].t2)
-                } else {
-                    m[i].t1.operator = m[i].t2.operator
-                }
-            } else if (m[i].type === "remove") {
-                if (m[i].t1.type === "UnaryExpression") {
-                    replaceObject(m[i].t1, m[i].t1.operand)
-                } else if (m[i].t1.type === "BinaryExpression") {
-                    // Replace with random child.
-                    replaceObject(m[i].t1, Math.random() < 0.5 ? m[i].t1.left : m[i].t1.right)
-                } else if (m[i].t1.type === "ConditionalExpression") {
-                    // Replace with random branch.
-                    replaceObject(m[i].t1, Math.random() < 0.5 ? m[i].t1.consequent : m[i].t1.alternate)
-                } else {
-                    console.log("uh oh", m[i].t1)
-                    return false
-                }
-            } else {
-                console.log("hmm", m[i])
-                return false
-            }
-            return true
-        }
-    }
-    return false
-}
-
-console.log("Distance:", distance(a, b, children, insertCost, removeCost, updateCost))
-while (executeEdit(m)) {
-    console.log(codeGen(a), "->", codeGen(b), "!")
-    console.log("Distance:", distance(a, b, children, insertCost, removeCost, updateCost))
-    m = mapping(a, b, children, insertCost, removeCost, updateCost)
-}
-
-console.log("All done")
-
-console.log(a)
 
 const canvas = document.querySelector("canvas")!
 const ctx = canvas.getContext("2d")!
@@ -196,7 +100,7 @@ function mod(n: number, m: number) {
     return ((n % m) + m) % m;
 }
 
-let f = (t: number) => 0
+let f = (_: number) => 0
 let t = 0
 function next() {
     return mod((f(t++)|0) / 256, 1) * 2 - 1
@@ -214,6 +118,13 @@ document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
     input.value = "t" // codeGen(generateExpression2(15))
     input.dispatchEvent(new Event("change"))
 }
+
+// document.querySelector<HTMLButtonElement>("#auto")!.onclick = async () => {
+//     while (true) {
+//         await new Promise(resolve => setTimeout(resolve, Math.random() * 5000))
+//         const choices = ["reset", "grow", "shrink", "change"]
+//     }
+// }
 
 function getExpression() {
     let mod
@@ -427,7 +338,7 @@ const changeRules = [{
     // t -> <constant>
     name: "variableToConstant",
     type: "IdentifierExpression",
-    apply: (node: any) => ({
+    apply: () => ({
         type: "LiteralNumericExpression",
         value: generateConstant(),
     }),
@@ -436,7 +347,7 @@ const changeRules = [{
     // <constant> -> t
     name: "constantToVariable",
     type: "LiteralNumericExpression",
-    apply: (node: any) => ({
+    apply: () => ({
         type: "IdentifierExpression",
         name: "t",
     }),
@@ -445,7 +356,7 @@ const changeRules = [{
     // <constant> -> <constant>
     name: "switchConstant",
     type: "LiteralNumericExpression",
-    apply: (node: any) => ({
+    apply: () => ({
         type: "LiteralNumericExpression",
         value: generateConstant(),
     }),
