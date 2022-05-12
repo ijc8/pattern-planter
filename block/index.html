@@ -1,25 +1,31 @@
-<!doctype html>
-<html>
-    <head>
-        <style>
-            canvas {
-                width: 500px;
-                height: 500px;
-                border: 1px solid red;
-                image-rendering: pixelated;
-            }
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vite App</title>
+    <style>
+      canvas {
+          width: 500px;
+          height: 500px;
+          border: 1px solid red;
+          image-rendering: pixelated;
+      }
 
-            input {
-                width: 500px;
-            }
-        </style>
-    </head>
-    <body>
-        <canvas width="40" height="40"></canvas>
-        <br/>
-        <input type="text" value="0" />
-        <br/>
-        <button>Synthesize Program</button>
-        <script type="text/javascript" src="index.js"></script>
-    </body>
+      input {
+          width: 500px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <canvas width="40" height="40"></canvas>
+      <br/>
+      <input type="text" value="0" />
+      <br/>
+      <button>Synthesize Program</button>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
 </html>
