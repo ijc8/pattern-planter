@@ -1,5 +1,120 @@
 import { codeGen } from "shift-codegen"
+import { distance, mapping } from "zhang-shasha"
 
+// var a = {
+//     label: 'a',
+//     children: [
+//         {label: 'b', children: []},
+//         {label: 'c', children: []}
+//     ]
+// }
+
+// var b = {
+//     label: 'a',
+//     children: [
+//         {label: 'b', children: []}
+//     ]
+// }
+
+function children(node: any) {
+    // return node.children
+    if (node.type === "ConditionalExpression") {
+        return [node.test, node.consequent, node.alternate]
+    } else if (node.type === "BinaryExpression") {
+        return [node.left, node.right]
+    } else if (node.type === "UnaryExpression") {
+        return [node.operand]
+    } else {
+        return []
+    }
+}
+
+function insertCost() { return 1 }
+function removeCost(node: any) {
+    // if (node.type === "BinaryExpression") return Infinity
+    return 1
+}
+function updateCost(from: any, to: any) {
+    // return from.label === to.label ? 0 : 1
+    if (from.type === to.type) {
+        if (to.type === "BinaryExpression" && from.operator !== to.operator) {
+            return 1
+        }
+        return 0
+    }
+    if ([from.type, to.type].includes("BinaryExpression")) return Infinity
+    if ([from.type, to.type].includes("ConditionalExpression")) return Infinity
+    return 1
+}
+
+// console.log("dist", distance(a, b, children, insertCost, removeCost, updateCost))
+// console.log(mapping(a, b, children, insertCost, removeCost, updateCost))
+
+let a = generateExpression(3, true)
+const b = generateExpression(3, true)
+console.log(codeGen(a), "->", codeGen(b))
+console.log(a)
+console.log(b)
+console.log(JSON.parse(JSON.stringify(mapping(a, b, children, insertCost, removeCost, updateCost))))
+// console.log(mapping(b, a, children, insertCost, removeCost, updateCost))
+
+function replaceObject(target: any, source: any) {
+    for (const prop of Object.getOwnPropertyNames(target)) {
+        delete target[prop]
+    }
+    Object.assign(target, source)
+}
+
+// Execute the first instruction.
+let m = mapping(a, b, children, insertCost, removeCost, updateCost)
+let i = 0
+
+function executeEdit(m: any[]) {
+    for (let i = 0; i < m.length; i++) {
+        if (m[i].type === "match") {
+            console.log("Got a match, doing nothing.")
+        } else {
+            console.log("Got", JSON.parse(JSON.stringify(m[i])))
+            if (m[i].type === "update") {
+                console.log("Performing update")
+                if (m[i].t1.type !== m[i].t2.type) {
+                    replaceObject(m[i].t1, m[i].t2)
+                } else {
+                    m[i].t1.operator = m[i].t2.operator
+                }
+            } else if (m[i].type === "remove") {
+                if (m[i].t1.type === "UnaryExpression") {
+                    replaceObject(m[i].t1, m[i].t1.operand)
+                } else if (m[i].t1.type === "BinaryExpression") {
+                    // Replace with random child.
+                    replaceObject(m[i].t1, Math.random() < 0.5 ? m[i].t1.left : m[i].t1.right)
+                } else if (m[i].t1.type === "ConditionalExpression") {
+                    // Replace with random branch.
+                    replaceObject(m[i].t1, Math.random() < 0.5 ? m[i].t1.consequent : m[i].t1.alternate)
+                } else {
+                    console.log("uh oh", m[i].t1)
+                    return false
+                }
+            } else {
+                console.log("hmm", m[i])
+                return false
+            }
+            return true
+        }
+    }
+    return false
+}
+
+console.log("Distance:", distance(a, b, children, insertCost, removeCost, updateCost))
+while (executeEdit(m)) {
+    console.log(codeGen(a), "->", codeGen(b), "!")
+    console.log("Distance:", distance(a, b, children, insertCost, removeCost, updateCost))
+    m = mapping(a, b, children, insertCost, removeCost, updateCost)
+}
+
+console.log("All done")
+
+console.log(a)
 
 const canvas = document.querySelector("canvas")!
 const ctx = canvas.getContext("2d")!
@@ -165,7 +280,7 @@ async function start() {
     // const buffer = await req.arrayBuffer()
     // const decoded = (await audioCtx.decodeAudioData(buffer)).getChannelData(0)
     // gen = decoded[Symbol.iterator]()
-
+    
     for (const buffer of buffers) {
         const data = buffer.getChannelData(0)
         for (let i = 0; i < data.length; i++) {

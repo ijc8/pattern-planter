@@ -12,6 +12,7 @@
     "vite": "^2.9.9"
   },
   "dependencies": {
-    "shift-codegen": "^8.0.0"
+    "shift-codegen": "^8.0.0",
+    "zhang-shasha": "^1.0.0"
   }
 }
