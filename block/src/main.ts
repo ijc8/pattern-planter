@@ -23,7 +23,7 @@ function replaceObject(target: any, source: any) {
 
 const canvas = document.querySelector("canvas")!
 const ctx = canvas.getContext("2d")!
-ctx.fillRect(0, 0, 10, 10)
+ctx.fillRect(0, 0, 40, 40)
 ctx.imageSmoothingEnabled = false
 
 const image = ctx.createImageData(40, 40)
@@ -106,17 +106,45 @@ input.onchange = e => {
     }
 }
 
-document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
-    input.value = "t" // codeGen(generateExpression2(15))
+const resetButton = document.querySelector<HTMLButtonElement>("#reset")!
+resetButton.onclick = () => {
+    input.value = "t"
     input.dispatchEvent(new Event("change"))
 }
 
-// document.querySelector<HTMLButtonElement>("#auto")!.onclick = async () => {
-//     while (true) {
-//         await new Promise(resolve => setTimeout(resolve, Math.random() * 5000))
-//         const choices = ["reset", "grow", "shrink", "change"]
-//     }
-// }
+function sleep(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const autoButton = document.querySelector<HTMLButtonElement>("#auto")!
+let autoPromise: Promise<void> | true | null
+autoButton.onclick = () => {
+    if (!autoPromise) {
+        autoButton.classList.add("clicked")
+        autoPromise = true
+        autoPromise = runAuto()
+    } else {
+        autoButton.classList.remove("clicked")
+        autoPromise = null
+    }
+}
+
+async function runAuto() {
+    if (input.value === "0") {
+        resetButton.click()
+    }
+    while (autoPromise) {
+        const choices = ["grow", "change", "shrink"]
+        const choice = choices[Math.floor(Math.random() * choices.length)]
+        console.log(choice)
+        const button = document.querySelector(`#${choice}`) as HTMLButtonElement
+        button.click()
+        button.classList.add("clicked")
+        await sleep(100)
+        button.classList.remove("clicked")
+        await sleep(400 + Math.random() * 1500)
+    }
+}
 
 function getExpression() {
     let mod
