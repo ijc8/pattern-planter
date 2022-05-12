@@ -1,4 +1,5 @@
 import { codeGen } from "shift-codegen"
+import { parseModule } from "shift-parser";
 import { distance, mapping } from "zhang-shasha"
 
 // var a = {
@@ -200,7 +201,7 @@ let f = (t: number) => 0
 const gen = (function* () {
     for (let t = 0;; t++) {
         if (t % 48000 === 0) console.log(t)
-        yield mod(f(t) / 256, 1) * 2 - 1
+        yield mod((f(t)|0) / 256, 1) * 2 - 1
     }
 })()
 
@@ -210,8 +211,19 @@ input.onchange = e => {
     console.log("bang", f)
 }
 
-document.querySelector("button")!.onclick = () => {
-    input.value = codeGen(generateExpression2(15))
+document.querySelector<HTMLButtonElement>("#reset")!.onclick = () => {
+    input.value = "t" // codeGen(generateExpression2(15))
+    input.dispatchEvent(new Event("change"))
+}
+
+document.querySelector<HTMLButtonElement>("#grow")!.onclick = () => {
+    const mod = parseModule(input.value)
+    if (mod.items.length !== 1 || mod.items[0].type !== "ExpressionStatement") {
+        alert("Please enter a valid expression.")
+    }
+    const expr = mod.items[0].expression
+    growExpression(expr)
+    input.value = codeGen(expr)
     input.dispatchEvent(new Event("change"))
 }
 
