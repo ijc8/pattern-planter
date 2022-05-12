@@ -198,6 +198,9 @@ sources[1].onended = () => {
 // Send the samples out in 128-block chunks via AudioWorklet. (Awkward size, since 128 doesn't divide 1600.)
 // Alternatively, do the thing with chaining AudioBufferSourceNodes, the way CPAL does it.
 
+function mod(n, m) {
+    return ((n % m) + m) % m;
+}
 
 // let gen = mul(add(osc(c(120.1)), mul(rand, c(0.1))), c(0.5))
 let woo = osc(add(240, mul(osc(0.1), 120)))
@@ -205,7 +208,8 @@ let woo = osc(add(240, mul(osc(0.1), 120)))
 // let comp = mul(rand, cycle(cat(cat(take(osc(1), s(0.5)), take(osc(4), s(0.5))), take(c(0), s(0.5)))))
 // let comp = map(map(count(), t => t / 48000), t => ((t%(1/30))>(1/60))*2-1)
 let f = t => 0 // ((t >> 10) & 42) * t
-let comp = map(count(), t => (f(t) / 256) % 1 * 2 - 1)
+let comp = map(count(), t => mod(f(t) / 256, 1) * 2 - 1)
+// let comp = map(count(), t => (f(t) / 256) % 1 * 2 - 1)
 let gen = comp[Symbol.iterator]()
 
 const input = document.querySelector("input")
@@ -217,12 +221,12 @@ input.onchange = e => {
 }
 
 document.querySelector("button").onclick = e => {
-    input.value = generateExpression(4)
+    input.value = generateExpression(5)
     input.dispatchEvent(new Event("change"))
 }
 
 function generateExpression(depth) {
-    const ops = ["<<",">>","+","*","%","|","&","^"]
+    const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
     const op = ops[Math.floor(Math.random() * ops.length)]
     if (depth === 0) {
         if (Math.random() < 0.5) {
