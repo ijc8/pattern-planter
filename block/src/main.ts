@@ -12,12 +12,6 @@ function weightedChoice<T extends { weight: number }>(choices: T[]) {
     return undefined
 }
 
-function seemsAudible(f: (t: number) => number) {
-    const testValues = [13, 24, 48001, 1234567]
-    const outputs = testValues.map(f)
-    return outputs.some(x => x != outputs[0])
-}
-
 function children(node: any) {
     if (node.type === "ConditionalExpression") {
         return [node.test, node.consequent, node.alternate]
@@ -150,6 +144,8 @@ async function runAuto() {
     if (input.value === "0" || !getExpression(false)) {
         resetButton.click()
     }
+    const testValues = [13, 24, 32, 48001]
+    let oldOutputs = testValues.map(_ => 0)
     while (autoPromise) {
         const choices = [{ button: growButton, weight: 0.5 }]
         if (input.value !== "t") {
@@ -164,7 +160,14 @@ async function runAuto() {
         button.classList.add("clicked")
         await sleep(50)
         button.classList.remove("clicked")
-        if (seemsAudible(f)) {
+
+        // Let's see how interesting this expression is.
+        const outputs = testValues.map(f)
+        if (outputs.every(x => x === outputs[0])) {
+            console.log("Inaudible, skipping.")
+        } else if (outputs.every((x, i) => x === oldOutputs[i])) {
+            console.log("Same as last function, skipping.")
+        } else {
             await sleep(400 + Math.random() * 1500)
         }
     }
