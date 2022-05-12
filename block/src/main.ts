@@ -94,66 +94,69 @@ input.onchange = e => {
     console.log("bang", f)
 }
 
-document.querySelector("button")!.onclick = e => {
-    input.value = codeGen(generateExpression(5))
+document.querySelector("button")!.onclick = () => {
+    input.value = codeGen(generateExpression(4, true))
     input.dispatchEvent(new Event("change"))
 }
 
-function generateAtom() {
+function generateExpression(depth: number, mustUseTime=false): any {
     const p = Math.random()
-    if (p < 0.4) {
+    if (depth === 0 || p < 0.1) {
+        return generateAtom(mustUseTime)
+    } else if (p < 0.2) {
+        return generateUnaryExpression(depth, mustUseTime)
+    } else if (p < 0.25) {
+        return generateTernaryExpression(depth, mustUseTime)
+    } else {
+        return generateBinaryExpression(depth, mustUseTime)
+    }
+}
+
+function generateAtom(mustUseTime=false) {
+    const p = Math.random()
+    const probT = 0.4
+    if (mustUseTime || p < probT) {
         return { type: "IdentifierExpression", name: "t" }
     } else {
         // Larger numbers should be less likely. (Also, we skip 0.)
-        return { type: "LiteralNumericExpression", value: Math.floor(Math.random() * (1/(p-0.5))) + 1 }
+        return { type: "LiteralNumericExpression", value: Math.floor(Math.random() * ((1-probT)/(p-probT))) + 1 }
     }
 }
 
-function generateExpression(depth: number): any {
-    const p = Math.random()
-    if (depth === 0 || p < 0.1) {
-        return generateAtom()
-    } else if (p < 0.2) {
-        return generateUnaryExpression(depth)
-    } else if (p < 0.25) {
-        return generateTernaryExpression(depth)
-    } else {
-        return generateBinaryExpression(depth)
-    }
-}
-
-function generateUnaryExpression(depth: number) {
+function generateUnaryExpression(depth: number, mustUseTime=false) {
     return {
         type: "UnaryExpression",
         operator: "~",
-        operand: generateExpression(depth-1)
+        operand: generateExpression(depth-1, mustUseTime)
     }
 }
 
-function generateTernaryExpression(depth: number) {
+function generateBinaryExpression(depth: number, mustUseTime=false) {
+    const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
+    const operator = ops[Math.floor(Math.random() * ops.length)]
+    const pos = Math.random() > 0.5
+    return {
+        type: "BinaryExpression",
+        left: generateExpression(depth-1, mustUseTime && pos),
+        operator,
+        right: generateExpression(depth-1, mustUseTime && !pos),
+    }
+}
+
+function generateTernaryExpression(depth: number, mustUseTime=false) {
     const ops = ["<","<=",">=",">","==","!="]
     const operator = ops[Math.floor(Math.random() * ops.length)]
+    const pos = Math.floor(Math.random() * 4)
     return {
         type: "ConditionalExpression",
         test: {
             type: "BinaryExpression",
-            left: generateExpression(depth-1),
+            left: generateExpression(depth-1, mustUseTime && (pos === 0)),
             operator,
-            right: generateExpression(depth-1),
+            right: generateExpression(depth-1, mustUseTime && (pos === 1)),
         },
-        consequent: generateExpression(depth-1),
-        alternate: generateExpression(depth-1),
-    }
-}
-
-function generateBinaryExpression(depth: number) {
-    const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
-    const operator = ops[Math.floor(Math.random() * ops.length)]
-    return {
-        type: "BinaryExpression",
-        left: generateExpression(depth-1),
-        operator,
-        right: generateExpression(depth-1),
+        consequent: generateExpression(depth-1, mustUseTime && (pos === 2)),
+        alternate: generateExpression(depth-1, mustUseTime && (pos === 3)),
     }
 }
 
