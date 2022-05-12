@@ -457,6 +457,7 @@ async function start() {
     // const buffer = await req.arrayBuffer()
     // const decoded = (await audioCtx.decodeAudioData(buffer)).getChannelData(0)
     // gen = decoded[Symbol.iterator]()
+    console.log("starting")
     
     for (const buffer of buffers) {
         const data = buffer.getChannelData(0)
@@ -465,11 +466,31 @@ async function start() {
         }
     }
     schedTime = audioCtx.currentTime + 0.1
+    console.log("Start 0")
     sources[0].start(schedTime)
     schedTime += buffers[0].duration
+    console.log("Start 1")
     sources[1].start(schedTime)
 }
 
-start()
+function resumeContextOnInteraction(audioContext: AudioContext) {
+    // from https://github.com/captbaritone/winamp2-js/blob/a5a76f554c369637431fe809d16f3f7e06a21969/js/media/index.js#L8-L27
+    if (audioContext.state === "suspended") {
+        const resume = async () => {
+            await audioContext.resume()
+            if (audioContext.state === "running") {
+                document.body.removeEventListener("touchend", resume, false)
+                document.body.removeEventListener("click", resume, false)
+                document.body.removeEventListener("keydown", resume, false)
+                start()
+            }
+        }
+        document.body.addEventListener("touchend", resume, false)
+        document.body.addEventListener("click", resume, false)
+        document.body.addEventListener("keydown", resume, false)
+    } else {
+        start()
+    }
+}
 
-export {}
+resumeContextOnInteraction(audioCtx)
