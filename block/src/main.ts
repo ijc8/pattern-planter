@@ -170,6 +170,7 @@ async function runAuto() {
         } else {
             await sleep(400 + Math.random() * 1500)
         }
+        oldOutputs = outputs
     }
 }
 
