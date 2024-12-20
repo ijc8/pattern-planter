@@ -473,6 +473,7 @@ function convertTree(expr) {
     return out
 }
 
+let _update = null
 
 function drawTree(expr) {
     const treeData = convertTree(expr)
@@ -482,6 +483,21 @@ function drawTree(expr) {
     var margin = {top: 20, right: 90, bottom: 30, left: 90},
     width = 960 - margin.left - margin.right,
     height = 500 - margin.top - margin.bottom;
+
+
+    if (_update !== null) {
+        // declares a tree layout and assigns the size
+        var treemap = d3.tree().size([height, width]);
+
+        // Assigns parent, children, height, depth
+        root = d3.hierarchy(treeData, function(d) { return d.children; });
+        root.x0 = height / 2;
+        root.y0 = 0;
+        _update(root)
+        return
+    }
+
+    _update = update
     
     // append the svg object to the body of the page
     // appends a 'group' element to 'svg'
@@ -520,9 +536,10 @@ function drawTree(expr) {
         }
         
         function update(source) {
+            console.log("update", source)
             
             // Assigns the x and y position for the nodes
-            var treeData = treemap(root);
+            var treeData = treemap(source);
             
             // Compute the new tree layout.
             var nodes = treeData.descendants(),
@@ -631,6 +648,8 @@ function drawTree(expr) {
             // Enter any new links at the parent's previous position.
             var linkEnter = link.enter().insert('path', "g")
             .attr("class", "link")
+            .attr("stroke", "black")
+            .attr("stroke-width", 3)
             .attr('d', function(d){
                 var o = {x: source.x0, y: source.y0}
                 return diagonal(o, o)
