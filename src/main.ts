@@ -39,7 +39,7 @@ ctx.imageSmoothingEnabled = false
 
 const image = ctx.createImageData(40, 40)
 
-const sampleRate = 48000
+const sampleRate = 12000 // 8000 // 48000
 
 function render(input: Float32Array) {
     const data = image.data
@@ -498,11 +498,17 @@ function drawTree(expr) {
     }
 
     _update = update
+
+    function clickTree(e) {
+        console.log("clickTree", e)
+        updateExpressionWithRules(growRules)
+    }
     
     // append the svg object to the body of the page
     // appends a 'group' element to 'svg'
     // moves the 'group' element to the top left margin
     var svg = d3.select("body").append("svg")
+    .on("click", clickTree)
     .attr("width", width + margin.right + margin.left)
     .attr("height", height + margin.top + margin.bottom)
     .append("g")
@@ -563,7 +569,7 @@ function drawTree(expr) {
                 // AFTER ....
                 return "translate(" + source.x0 + "," + source.y0 + ")";
             })
-            .on('click', click);
+            // .on('click', click);
             
             // var rectHeight = 60, rectWidth = 120;
             const rectHeight = 20, rectWidth = 20
@@ -697,15 +703,15 @@ function drawTree(expr) {
             }
             
             // Toggle children on click.
-            function click(d) {
-                if (d.children) {
-                    d._children = d.children;
-                    d.children = null;
-                } else {
-                    d.children = d._children;
-                    d._children = null;
-                }
-                update(d);
-            }
+            // function click(d) {
+            //     if (d.children) {
+            //         d._children = d.children;
+            //         d.children = null;
+            //     } else {
+            //         d.children = d._children;
+            //         d._children = null;
+            //     }
+            //     update(d);
+            // }
         }
     }
