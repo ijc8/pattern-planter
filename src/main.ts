@@ -492,17 +492,17 @@ function drawTree(expr) {
     height = 500 - margin.top - margin.bottom;
 
 
-    if (_update !== null) {
-        // declares a tree layout and assigns the size
-        var treemap = d3.tree().size([height, width]);
+    // if (_update !== null) {
+    //     // declares a tree layout and assigns the size
+    //     var treemap = d3.tree().size([height, width]);
 
-        // Assigns parent, children, height, depth
-        root = d3.hierarchy(treeData, function(d) { return d.children; });
-        root.x0 = height / 2;
-        root.y0 = 0;
-        _update(root)
-        return
-    }
+    //     // Assigns parent, children, height, depth
+    //     root = d3.hierarchy(treeData, function(d) { return d.children; });
+    //     root.x0 = height / 2;
+    //     root.y0 = 0;
+    //     _update(root)
+    //     return
+    // }
 
     _update = update
 
@@ -513,12 +513,71 @@ function drawTree(expr) {
 
     function clickLink(e, d) {
         console.log("clickLink", e, d)
-        const expr = getExpression()
-        const nodes = getDescendants(expr)
-        console.log(nodes[d.data.pos])
-        replaceObject(nodes[d.data.pos], generateAtom(false))
-        input.value = codeGen(expr)
-        input.dispatchEvent(new Event("change"))
+        // const expr = getExpression()
+        // const nodes = getDescendants(expr)
+        // console.log(nodes[d.data.pos])
+        // replaceObject(nodes[d.data.pos], generateAtom(false))
+        // input.value = codeGen(expr)
+        // input.dispatchEvent(new Event("change"))
+        // d.children = null
+        // d.data.name = "!"
+        const parent = d.parent
+        const index = parent.children.indexOf(d)
+        console.log("index", index)
+        parent.children[index] = Object.assign(new Node, {
+            parent,
+            depth: parent.depth + 1,
+            data: {
+                name: "!", // TODO generate atom
+                fill: "white",
+            }
+        })
+        update(d)
+        e.stopPropagation()
+    }
+
+    function clickNode(e, d) {
+        console.log("clickNode", e, d)
+        if (d.children) {
+            console.log("not a leaf node")
+            return
+        }
+        // d.data.name = "!"
+        // d.children = [Object.assign(new Node, {
+        //     parent: d,
+        //     depth: d.depth + 1,
+        //     data: {
+        //         name: "!", // TODO generate atom
+        //         fill: "white",
+        //     }
+        // })]
+        const parent = d.parent
+        const index = parent.children.indexOf(d)
+        const replacement = Object.assign(new Node, {
+            parent,
+            depth: parent.depth + 1,
+            data: {
+                name: "!", // TODO generate op
+                fill: "white",
+            }
+        })
+        replacement.children = [Object.assign(new Node, {
+            parent: replacement,
+            depth: replacement.depth + 1,
+            data: {
+                name: "!!", // TODO generate atom
+                fill: "white",
+            }
+        }), Object.assign(new Node, {
+            parent: replacement,
+            depth: replacement.depth + 1,
+            data: {
+                name: "!!", // TODO generate atom
+                fill: "white",
+            }
+        })]
+        parent.children[index] = replacement
+        update(d)
         e.stopPropagation()
     }
     
@@ -546,12 +605,15 @@ function drawTree(expr) {
     // root.children.forEach(collapse);
     
     update(root);
+
+    const Node = d3.hierarchy.prototype.constructor
+
     
     function update(source) {
         console.log("update", source)
         
         // Assigns the x and y position for the nodes
-        var treeData = treemap(source);
+        var treeData = treemap(root);
         
         // Compute the new tree layout.
         var nodes = treeData.descendants(),
@@ -566,7 +628,7 @@ function drawTree(expr) {
         var node = svg.selectAll('g.node')
             .data(nodes, function(d) {return d.id || (d.id = ++i); });
         
-        // Enter any new modes at the parent's previous position.
+        // Enter any new nodes at the parent's previous position.
         var nodeEnter = node.enter().append('g')
             .attr('class', 'node')
             .attr("transform", function(d) {
@@ -575,7 +637,7 @@ function drawTree(expr) {
                 // AFTER ....
                 return "translate(" + source.x0 + "," + source.y0 + ")";
             })
-            // .on('click', click);
+            .on('click', clickNode);
         
         // var rectHeight = 60, rectWidth = 120;
         const rectHeight = 20, rectWidth = 20
@@ -603,12 +665,6 @@ function drawTree(expr) {
                 return "middle";
             })
             .text(function(d) { return d.data.name; })
-            .append("tspan")
-            .attr("dy", "1.75em")
-            .attr("x", function(d) {
-                return 13;
-            })
-            .text(function(d) { return d.data.subname; });
         
         // UPDATE
         var nodeUpdate = nodeEnter.merge(node);
@@ -655,7 +711,7 @@ function drawTree(expr) {
         
         // Update the links...
         var link = svg.selectAll('path.link')
-            .data(links, function(d) { return d.id; });
+            .data(links, d => d.id);
         
         // Enter any new links at the parent's previous position.
         var linkEnter = link.enter().insert('path', "g")
@@ -700,17 +756,5 @@ function drawTree(expr) {
             
             return path
         }
-        
-        // Toggle children on click.
-        // function click(d) {
-        //     if (d.children) {
-        //         d._children = d.children;
-        //         d.children = null;
-        //     } else {
-        //         d.children = d._children;
-        //         d._children = null;
-        //     }
-        //     update(d);
-        // }
     }
 }
