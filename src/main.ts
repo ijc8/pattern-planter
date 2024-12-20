@@ -1,6 +1,7 @@
 import { codeGen } from "shift-codegen"
 import { parseModule } from "shift-parser"
-import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm"
+// import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm"
+import * as d3 from "d3"
 
 function weightedChoice<T extends { weight: number }>(choices: T[]) {
     const totalWeight = choices.reduce((acc, choice) => acc + choice.weight, 0)
@@ -284,7 +285,7 @@ function getDescendants(root: any) {
     while (stack.length) {
         const node = stack.pop()
         descendants.push(node)
-        for (const child of children(node)) {
+        for (const child of children(node).reverse()) {
             stack.push(child)
         }
     }
@@ -447,35 +448,41 @@ resumeContextOnInteraction(audioCtx)
 
 
 function convertTree(expr) {
-    let out = {}
-    if (expr.type === "BinaryExpression") {
-        out = {
-            name: expr.operator,
-            children: [expr.left, expr.right].map(convertTree),
+    let pos = 0
+    const recur = (expr) => {
+        let out = {}
+        const thisPos = pos
+        pos++
+        if (expr.type === "BinaryExpression") {
+            out = {
+                name: expr.operator,
+            }
+        } else if (expr.type === "UnaryExpression") {
+            out = {
+                name: expr.operator,
+            }
+        } else if (expr.type === "LiteralNumericExpression") {
+            out = {
+                name: expr.value,
+            }
+        } else if (expr.type === "IdentifierExpression") {
+            out = { name: expr.name }
         }
-    } else if (expr.type === "UnaryExpression") {
-        out = {
-            name: expr.operator,
-            children: [convertTree(expr.operand)],
-        }
-    } else if (expr.type === "LiteralNumericExpression") {
-        out = {
-            name: expr.value,
-            children: [],
-        }
-    } else if (expr.type === "IdentifierExpression") {
-        out = { name: expr.name }
+        Object.assign(out, {
+            subname: "",
+            fill: "white",
+            pos: thisPos,
+            children: children(expr).map(recur)
+        })
+        return out
     }
-    Object.assign(out, {
-        subname: "",
-        fill: "white",
-    })
-    return out
+    return recur(expr)
 }
 
 let _update = null
 
 function drawTree(expr) {
+    console.log(getDescendants(expr))
     const treeData = convertTree(expr)
     
     // https://stackoverflow.com/questions/69975911/rotate-tree-diagram-on-d3-js-v5-from-horizental-to-vertical
@@ -503,65 +510,64 @@ function drawTree(expr) {
         console.log("clickTree", e)
         updateExpressionWithRules(growRules)
     }
+
+    function clickLink(e, d) {
+        console.log("clickLink", e, d)
+        const expr = getExpression()
+        const nodes = getDescendants(expr)
+        console.log(nodes[d.data.pos])
+        replaceObject(nodes[d.data.pos], generateAtom(false))
+        input.value = codeGen(expr)
+        input.dispatchEvent(new Event("change"))
+        e.stopPropagation()
+    }
     
     // append the svg object to the body of the page
     // appends a 'group' element to 'svg'
     // moves the 'group' element to the top left margin
     var svg = d3.select("body").append("svg")
-    .on("click", clickTree)
-    .attr("width", width + margin.right + margin.left)
-    .attr("height", height + margin.top + margin.bottom)
-    .append("g")
-    .attr("transform", "translate("
-        + margin.left + "," + margin.top + ")");
+        .on("click", clickTree)
+        .attr("width", width + margin.right + margin.left)
+        .attr("height", height + margin.top + margin.bottom)
+        .append("g")
+        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    var i = 0, duration = 750, root;
+    
+    // declares a tree layout and assigns the size
+    var treemap = d3.tree().size([height, width]);
+    
+    // Assigns parent, children, height, depth
+    root = d3.hierarchy(treeData, function(d) { return d.children; });
+    root.x0 = height / 2;
+    root.y0 = 0;
+    
+    // Collapse after the second level
+    // root.children.forEach(collapse);
+    
+    update(root);
+    
+    function update(source) {
+        console.log("update", source)
         
-        var i = 0,
-        duration = 750,
-        root;
+        // Assigns the x and y position for the nodes
+        var treeData = treemap(source);
         
-        // declares a tree layout and assigns the size
-        var treemap = d3.tree().size([height, width]);
+        // Compute the new tree layout.
+        var nodes = treeData.descendants(),
+        links = treeData.descendants().slice(1);
         
-        // Assigns parent, children, height, depth
-        root = d3.hierarchy(treeData, function(d) { return d.children; });
-        root.x0 = height / 2;
-        root.y0 = 0;
+        // Normalize for fixed-depth.
+        nodes.forEach(function(d){ d.y = d.depth * 30}); 
         
-        // Collapse after the second level
-        // root.children.forEach(collapse);
+        // ****************** Nodes section ***************************
         
-        update(root);
-        
-        // Collapse the node and all it's children
-        function collapse(d) {
-            if(d.children) {
-                d._children = d.children
-                d._children.forEach(collapse)
-                d.children = null
-            }
-        }
-        
-        function update(source) {
-            console.log("update", source)
-            
-            // Assigns the x and y position for the nodes
-            var treeData = treemap(source);
-            
-            // Compute the new tree layout.
-            var nodes = treeData.descendants(),
-            links = treeData.descendants().slice(1);
-            
-            // Normalize for fixed-depth.
-            nodes.forEach(function(d){ d.y = d.depth * 30}); 
-            
-            // ****************** Nodes section ***************************
-            
-            // Update the nodes...
-            var node = svg.selectAll('g.node')
+        // Update the nodes...
+        var node = svg.selectAll('g.node')
             .data(nodes, function(d) {return d.id || (d.id = ++i); });
-            
-            // Enter any new modes at the parent's previous position.
-            var nodeEnter = node.enter().append('g')
+        
+        // Enter any new modes at the parent's previous position.
+        var nodeEnter = node.enter().append('g')
             .attr('class', 'node')
             .attr("transform", function(d) {
                 // BEFORE ....
@@ -570,11 +576,11 @@ function drawTree(expr) {
                 return "translate(" + source.x0 + "," + source.y0 + ")";
             })
             // .on('click', click);
-            
-            // var rectHeight = 60, rectWidth = 120;
-            const rectHeight = 20, rectWidth = 20
-            
-            nodeEnter.append('rect')
+        
+        // var rectHeight = 60, rectWidth = 120;
+        const rectHeight = 20, rectWidth = 20
+        
+        nodeEnter.append('rect')
             .attr('class', 'node')
             .attr("width", rectWidth)
             .attr("height", rectHeight)
@@ -585,9 +591,9 @@ function drawTree(expr) {
                 return d.data.fill;
             })
             .style("stroke", "black");
-            
-            // Add labels for the nodes
-            nodeEnter.append('text')
+        
+        // Add labels for the nodes
+        nodeEnter.append('text')
             .attr("class", "node-text")
             .attr("dy", ".35em")
             .attr("x", function(d) {
@@ -603,12 +609,12 @@ function drawTree(expr) {
                 return 13;
             })
             .text(function(d) { return d.data.subname; });
-            
-            // UPDATE
-            var nodeUpdate = nodeEnter.merge(node);
-            
-            // Transition to the proper position for the node
-            nodeUpdate.transition()
+        
+        // UPDATE
+        var nodeUpdate = nodeEnter.merge(node);
+        
+        // Transition to the proper position for the node
+        nodeUpdate.transition()
             .duration(duration)
             .attr("transform", function(d) { 
                 // BEFORE ....
@@ -616,18 +622,18 @@ function drawTree(expr) {
                 // AFTER ....
                 return "translate(" + d.x + "," + d.y + ")";
             });
-            
-            // Update the node attributes and style
-            nodeUpdate.select('circle.node')
+        
+        // Update the node attributes and style
+        nodeUpdate.select('circle.node')
             .attr('r', 10)
             .style("fill", function(d) {
                 return d._children ? "lightsteelblue" : "#fff";
             })
             .attr('cursor', 'pointer');
-            
-            
-            // Remove any exiting nodes
-            var nodeExit = node.exit().transition()
+        
+        
+        // Remove any exiting nodes
+        var nodeExit = node.exit().transition()
             .duration(duration)
             .attr("transform", function(d) {
                 // BEFORE ....
@@ -636,82 +642,75 @@ function drawTree(expr) {
                 return "translate(" + source.x + "," + source.y + ")";
             })
             .remove();
-            
-            // On exit reduce the node circles size to 0
-            nodeExit.select('circle')
+        
+        // On exit reduce the node circles size to 0
+        nodeExit.select('circle')
             .attr('r', 1e-6);
-            
-            // On exit reduce the opacity of text labels
-            nodeExit.select('text')
+        
+        // On exit reduce the opacity of text labels
+        nodeExit.select('text')
             .style('fill-opacity', 1e-6);
-            
-            // ****************** links section ***************************
-            
-            // Update the links...
-            var link = svg.selectAll('path.link')
+        
+        // ****************** links section ***************************
+        
+        // Update the links...
+        var link = svg.selectAll('path.link')
             .data(links, function(d) { return d.id; });
-            
-            // Enter any new links at the parent's previous position.
-            var linkEnter = link.enter().insert('path', "g")
+        
+        // Enter any new links at the parent's previous position.
+        var linkEnter = link.enter().insert('path', "g")
             .attr("class", "link")
+            .on("click", clickLink)
             .attr("stroke", "black")
             .attr("stroke-width", 3)
             .attr('d', function(d){
                 var o = {x: source.x0, y: source.y0}
                 return diagonal(o, o)
             });
-            
-            // UPDATE
-            var linkUpdate = linkEnter.merge(link);
-            
-            // Transition back to the parent element position
-            linkUpdate.transition()
+        
+        // UPDATE
+        var linkUpdate = linkEnter.merge(link);
+        
+        // Transition back to the parent element position
+        linkUpdate.transition()
             .duration(duration)
             .attr('d', function(d){ return diagonal(d, d.parent) });
-            
-            // Remove any exiting links
-            var linkExit = link.exit().transition()
+        
+        // Remove any exiting links
+        var linkExit = link.exit().transition()
             .duration(duration)
             .attr('d', function(d) {
                 var o = {x: source.x, y: source.y}
                 return diagonal(o, o)
             })
             .remove();
+        
+        // Store the old positions for transition.
+        nodes.forEach(function(d){
+            d.x0 = d.x;
+            d.y0 = d.y;
+        });
+        
+        // Creates a curved (diagonal) path from parent to the child nodes
+        function diagonal(s, d) {
+            const path = `M ${s.x + (rectWidth / 2)} ${s.y}
+                C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${s.y},
+                ${(s.x + d.x) / 2 + (rectWidth / 2)} ${d.y},
+                ${d.x + (rectWidth / 2)} ${d.y}`
             
-            // Store the old positions for transition.
-            nodes.forEach(function(d){
-                d.x0 = d.x;
-                d.y0 = d.y;
-            });
-            
-            // Creates a curved (diagonal) path from parent to the child nodes
-            function diagonal(s, d) {
-                
-                // BEFORE ....
-                //path = `M ${s.y} ${s.x}
-                //        C ${(s.y + d.y) / 2} ${s.x},
-                //          ${(s.y + d.y) / 2} ${d.x},
-                //          ${d.y} ${d.x}`
-                
-                // AFTER ....
-                const path = `M ${s.x + (rectWidth / 2)} ${s.y}
-            C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${s.y},
-              ${(s.x + d.x) / 2 + (rectWidth / 2)} ${d.y},
-              ${d.x + (rectWidth / 2)} ${d.y}`
-                
-                return path
-            }
-            
-            // Toggle children on click.
-            // function click(d) {
-            //     if (d.children) {
-            //         d._children = d.children;
-            //         d.children = null;
-            //     } else {
-            //         d.children = d._children;
-            //         d._children = null;
-            //     }
-            //     update(d);
-            // }
+            return path
         }
+        
+        // Toggle children on click.
+        // function click(d) {
+        //     if (d.children) {
+        //         d._children = d.children;
+        //         d.children = null;
+        //     } else {
+        //         d.children = d._children;
+        //         d._children = null;
+        //     }
+        //     update(d);
+        // }
     }
+}
