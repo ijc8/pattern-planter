@@ -529,7 +529,7 @@ function drawTree(expr) {
             links = treeData.descendants().slice(1);
             
             // Normalize for fixed-depth.
-            nodes.forEach(function(d){ d.y = d.depth * 180}); 
+            nodes.forEach(function(d){ d.y = d.depth * 30}); 
             
             // ****************** Nodes section ***************************
             
@@ -548,7 +548,8 @@ function drawTree(expr) {
             })
             .on('click', click);
             
-            var rectHeight = 60, rectWidth = 120;
+            // var rectHeight = 60, rectWidth = 120;
+            const rectHeight = 20, rectWidth = 20
             
             nodeEnter.append('rect')
             .attr('class', 'node')
@@ -559,16 +560,18 @@ function drawTree(expr) {
             .attr("rx","5")
             .style("fill", function(d) {
                 return d.data.fill;
-            });
+            })
+            .style("stroke", "black");
             
             // Add labels for the nodes
             nodeEnter.append('text')
-            .attr("dy", "-.35em")
+            .attr("class", "node-text")
+            .attr("dy", ".35em")
             .attr("x", function(d) {
-                return 13;
+                return rectWidth / 2;
             })
             .attr("text-anchor", function(d) {
-                return "start";
+                return "middle";
             })
             .text(function(d) { return d.data.name; })
             .append("tspan")
