@@ -33,27 +33,6 @@ function replaceObject(target: any, source: any) {
     Object.assign(target, source)
 }
 
-function mod(n: number, m: number) {
-    return ((n % m) + m) % m;
-}
-
-let f = (_: number) => -1
-let t = 0
-function next() {
-    return f(t++)
-}
-
-const input = document.querySelector("input")!
-input.onchange = e => {
-    // const expr = getExpression()
-    // console.log(expr)
-    // if (expr) {
-        // drawTree(expr)
-        const g = eval("t=>" + (e.target as HTMLInputElement).value)
-        f = (t: number) => mod((g(t)|0) / 256, 1) * 2 - 1
-    // }
-}
-
 function playTree(tree) {
     // input.value = convertTreeToProgram(tree)
     // input.dispatchEvent(new Event("change"))
@@ -62,61 +41,8 @@ function playTree(tree) {
     repl.editor.evaluate()
 }
 
-const resetButton = document.querySelector<HTMLButtonElement>("#reset")!
-resetButton.onclick = () => {
-    input.value = "t"
-    input.dispatchEvent(new Event("change"))
-}
-
 function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-let autoPromise: Promise<void> | true | null
-const autoButton = document.querySelector<HTMLButtonElement>("#auto")!
-autoButton.onclick = () => {
-    if (!autoPromise) {
-        autoButton.classList.add("clicked")
-        autoPromise = true
-        autoPromise = runAuto()
-    } else {
-        autoButton.classList.remove("clicked")
-        autoPromise = null
-    }
-}
-
-async function runAuto() {
-    if (input.value === "0" || !getExpression(false)) {
-        resetButton.click()
-    }
-    const testValues = [13, 24, 32, 48001]
-    let oldOutputs = testValues.map(_ => 0)
-    while (autoPromise) {
-        const choices = [{ button: growButton, weight: 0.5 }]
-        if (input.value !== "t") {
-            choices.push({ button: changeButton, weight: 0.4 })
-            choices.push({ button: resetButton, weight: 0.01 })
-            if (input.value.includes("t")) {
-                choices.push({ button: shrinkButton, weight: 0.09 })
-            }
-        }
-        const button = weightedChoice(choices)!.button
-        button.click()
-        button.classList.add("clicked")
-        await sleep(50)
-        button.classList.remove("clicked")
-        
-        // Let's see how interesting this expression is.
-        const outputs = testValues.map(f)
-        if (outputs.every(x => x === outputs[0])) {
-            console.log("Inaudible, skipping.")
-        } else if (outputs.every((x, i) => x === oldOutputs[i])) {
-            console.log("Same as last function, skipping.")
-        } else {
-            await sleep(400 + Math.random() * 1500)
-        }
-        oldOutputs = outputs
-    }
 }
 
 function getExpression(warn=true) {
@@ -129,29 +55,6 @@ function getExpression(warn=true) {
             return null
     }
     return mod.items[0].expression
-}
-
-function updateExpressionWithRules(rules: Rule[]) {
-    const expr = getExpression()
-    if (!expr) return
-    applyRandomRule(expr, rules)
-    input.value = codeGen(expr)
-    input.dispatchEvent(new Event("change"))
-}
-
-const growButton = document.querySelector<HTMLButtonElement>("#grow")!
-growButton.onclick = () => {
-    updateExpressionWithRules(growRules)
-}
-
-const shrinkButton = document.querySelector<HTMLButtonElement>("#shrink")!
-shrinkButton.onclick = () => {
-    updateExpressionWithRules(shrinkRules)
-}
-
-const changeButton = document.querySelector<HTMLButtonElement>("#change")!
-changeButton.onclick = () => {
-    updateExpressionWithRules(changeRules)
 }
 
 function generateExpression(depth: number, mustUseTime=false): any {
@@ -380,40 +283,18 @@ function setupTree() {
     
     // https://stackoverflow.com/questions/69975911/rotate-tree-diagram-on-d3-js-v5-from-horizental-to-vertical
     // Set the dimensions and margins of the diagram
-    var margin = {top: 20, right: 90, bottom: 30, left: 90},
-    width = 960 - margin.left - margin.right,
-    height = 500 - margin.top - margin.bottom;
-
-
-    // if (_update !== null) {
-    //     // declares a tree layout and assigns the size
-    //     var treemap = d3.tree().size([height, width]);
-
-    //     // Assigns parent, children, height, depth
-    //     root = d3.hierarchy(treeData, function(d) { return d.children; });
-    //     root.x0 = height / 2;
-    //     root.y0 = 0;
-    //     _update(root)
-    //     return
-    // }
+    const margin = {top: 20, right: 90, bottom: 30, left: 90},
+        width = 960 - margin.left - margin.right,
+        height = 500 - margin.top - margin.bottom;
 
     _update = update
 
     function clickTree(e) {
         console.log("clickTree", e)
-        // updateExpressionWithRules(growRules)
     }
 
     function clickLink(e, d) {
         console.log("clickLink", e, d)
-        // const expr = getExpression()
-        // const nodes = getDescendants(expr)
-        // console.log(nodes[d.data.pos])
-        // replaceObject(nodes[d.data.pos], generateAtom(false))
-        // input.value = codeGen(expr)
-        // input.dispatchEvent(new Event("change"))
-        // d.children = null
-        // d.data.name = "!"
         const parent = d.parent
         const index = parent.children.indexOf(d)
         console.log("index", index)
@@ -491,7 +372,7 @@ function setupTree() {
     // append the svg object to the body of the page
     // appends a 'group' element to 'svg'
     // moves the 'group' element to the top left margin
-    var svg = d3.select("body").append("svg")
+    var svg = d3.select("#planter").append("svg")
         .on("click", clickTree)
         .attr("width", width + margin.right + margin.left)
         .attr("height", height + margin.top + margin.bottom)
