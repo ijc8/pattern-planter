@@ -113,13 +113,18 @@ function next() {
 
 const input = document.querySelector("input")!
 input.onchange = e => {
-    const expr = getExpression()
-    console.log(expr)
-    if (expr) {
-        drawTree(expr)
+    // const expr = getExpression()
+    // console.log(expr)
+    // if (expr) {
+        // drawTree(expr)
         const g = eval("t=>" + (e.target as HTMLInputElement).value)
         f = (t: number) => mod((g(t)|0) / 256, 1) * 2 - 1
-    }
+    // }
+}
+
+function playTree(tree) {
+    input.value = convertTreeToExpression(tree)
+    input.dispatchEvent(new Event("change"))
 }
 
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!
@@ -250,9 +255,12 @@ function generateUnaryExpression(depth: number, mustUseTime=false) {
     }
 }
 
+function choice(array: any[]) {
+    return array[Math.floor(Math.random() * array.length)]
+}
+
 function generateBinaryExpression(depth: number, mustUseTime=false) {
-    const ops = ["<<",">>","+","-","*","/","%","|","&","^"]
-    const operator = ops[Math.floor(Math.random() * ops.length)]
+    const operator = choice(BINARY_OPS)
     const pos = Math.random() > 0.5
     return {
         type: "BinaryExpression",
@@ -481,6 +489,10 @@ function convertTree(expr) {
 
 let _update = null
 
+function genAtom() {
+    return Math.random() < 0.4 ? "t" : generateConstant()
+}
+
 function drawTree(expr) {
     console.log(getDescendants(expr))
     const treeData = convertTree(expr)
@@ -508,7 +520,7 @@ function drawTree(expr) {
 
     function clickTree(e) {
         console.log("clickTree", e)
-        updateExpressionWithRules(growRules)
+        // updateExpressionWithRules(growRules)
     }
 
     function clickLink(e, d) {
@@ -528,12 +540,14 @@ function drawTree(expr) {
             parent,
             depth: parent.depth + 1,
             data: {
-                name: "!", // TODO generate atom
+                name: genAtom(),
                 fill: "white",
             }
         })
         update(d)
         e.stopPropagation()
+        playTree(root)
+
     }
 
     function clickNode(e, d) {
@@ -542,22 +556,14 @@ function drawTree(expr) {
             console.log("not a leaf node")
             return
         }
-        // d.data.name = "!"
-        // d.children = [Object.assign(new Node, {
-        //     parent: d,
-        //     depth: d.depth + 1,
-        //     data: {
-        //         name: "!", // TODO generate atom
-        //         fill: "white",
-        //     }
-        // })]
         const parent = d.parent
         const index = parent.children.indexOf(d)
+        const type = Math.random() < 0.25 ? "unary" : "binary"
         const replacement = Object.assign(new Node, {
             parent,
-            depth: parent.depth + 1,
+            depth: d.depth,
             data: {
-                name: "!", // TODO generate op
+                name: type === "unary" ? "~" : choice(BINARY_OPS),
                 fill: "white",
             }
         })
@@ -565,20 +571,30 @@ function drawTree(expr) {
             parent: replacement,
             depth: replacement.depth + 1,
             data: {
-                name: "!!", // TODO generate atom
-                fill: "white",
-            }
-        }), Object.assign(new Node, {
-            parent: replacement,
-            depth: replacement.depth + 1,
-            data: {
-                name: "!!", // TODO generate atom
+                name: d.data.name,
                 fill: "white",
             }
         })]
+        if (type === "binary") {
+            replacement.children.push(Object.assign(new Node, {
+                parent: replacement,
+                depth: replacement.depth + 1,
+                data: {
+                    name: genAtom(),
+                    fill: "white",
+                }
+            }))
+            if (Math.random() < 0.5) {
+                const tmp = replacement.children[0]
+                replacement.children[0] = replacement.children[1]
+                replacement.children[1] = tmp
+            }
+        }
         parent.children[index] = replacement
+        // replaceObject(d, replacement)
         update(d)
         e.stopPropagation()
+        playTree(root)
     }
     
     // append the svg object to the body of the page
@@ -611,6 +627,7 @@ function drawTree(expr) {
     
     function update(source) {
         console.log("update", source)
+        console.log("new expr", root, convertTreeToExpression(root))
         
         // Assigns the x and y position for the nodes
         var treeData = treemap(root);
@@ -758,3 +775,24 @@ function drawTree(expr) {
         }
     }
 }
+
+function convertTreeToExpression(tree) {
+    console.log("???", tree, tree.data.name, tree.children?.length)
+    if (tree.data.name === " ") { // HACK: Special case for root...
+        return convertTreeToExpression(tree.children[0])
+    } else if (tree.data.name === "~") {
+        return `~(${convertTreeToExpression(tree.children[0])})`
+    } else if (BINARY_OPS.includes(tree.data.name)) {
+        return `(${convertTreeToExpression(tree.children[0])})${tree.data.name}(${convertTreeToExpression(tree.children[1])})`
+    } else {
+        return tree.data.name
+    }
+}
+
+drawTree({
+    type: "UnaryExpression",
+    operator: " ",
+    operand: {
+        type: "LiteralNumericExpression", value: 0
+    },
+})
