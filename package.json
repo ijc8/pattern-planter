@@ -13,6 +13,7 @@
     "vite": "^2.9.9"
   },
   "dependencies": {
+    "@strudel/soundfonts": "^1.1.0",
     "@strudel/web": "^1.1.0",
     "d3": "^7.9.0",
     "shift-codegen": "^8.0.0",

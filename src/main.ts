@@ -2,7 +2,6 @@ import { codeGen } from "shift-codegen"
 import { parseModule } from "shift-parser"
 // import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm"
 import * as d3 from "d3"
-import { initStrudel, evaluate, samples } from '@strudel/web';
 
 function weightedChoice<T extends { weight: number }>(choices: T[]) {
     const totalWeight = choices.reduce((acc, choice) => acc + choice.weight, 0)
@@ -34,74 +33,6 @@ function replaceObject(target: any, source: any) {
     Object.assign(target, source)
 }
 
-const canvas = document.querySelector("canvas")!
-const ctx = canvas.getContext("2d")!
-ctx.fillRect(0, 0, 40, 40)
-ctx.imageSmoothingEnabled = false
-
-const image = ctx.createImageData(40, 40)
-
-const sampleRate = 12000 // 8000 // 48000
-
-function render(input: Float32Array) {
-    const data = image.data
-    for (let y = 0; y < 40; y++) {
-        for (let x = 0; x < 40; x++) {
-            const index = x + y*40
-            const v = Math.round((input[index] + 1) / 2 * 255)
-            data[index*4 + 0] = v
-            data[index*4 + 1] = v
-            data[index*4 + 2] = v
-            data[index*4 + 3] = 255
-        }
-    }
-    ctx.putImageData(image, 0, 0)
-}
-
-const audioCtx = new AudioContext({ sampleRate })
-
-const buffers = [
-    new AudioBuffer({ length: 1600, sampleRate }),
-    new AudioBuffer({ length: 1600, sampleRate }),
-]
-
-let schedTime = 0
-
-const sources = [
-    new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] }),
-    new AudioBufferSourceNode(audioCtx, { buffer: buffers[1] }),
-]
-
-// sources[0].connect(audioCtx.destination)
-// sources[0].onended = () => {
-//     const data = buffers[0].getChannelData(0)
-//     for (let i = 0; i < data.length; i++) {
-//         data[i] = next()
-//     }
-//     render(data)
-//     const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] })
-//     source.connect(audioCtx.destination)
-//     source.onended = sources[0].onended
-//     source.start(schedTime)
-//     schedTime += buffers[0].duration
-//     sources[0] = source
-// }
-
-// sources[1].connect(audioCtx.destination)
-// sources[1].onended = () => {
-//     const data = buffers[1].getChannelData(0)
-//     for (let i = 0; i < data.length; i++) {
-//         data[i] = next()
-//     }
-//     render(data)
-//     const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[1] })
-//     source.connect(audioCtx.destination)
-//     source.onended = sources[1].onended
-//     source.start(schedTime)
-//     schedTime += buffers[1].duration
-//     sources[1] = source
-// }
-
 function mod(n: number, m: number) {
     return ((n % m) + m) % m;
 }
@@ -124,9 +55,11 @@ input.onchange = e => {
 }
 
 function playTree(tree) {
-    input.value = convertTreeToExpression(tree)
+    // input.value = convertTreeToProgram(tree)
     // input.dispatchEvent(new Event("change"))
-    evaluate(input.value)
+    // evaluate(input.value)
+    repl.editor.setCode(convertTreeToProgram(tree))
+    repl.editor.evaluate()
 }
 
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!
@@ -421,86 +354,19 @@ const changeRules = [{
     weight: 1,
 }]
 
-async function start() {
-    for (const buffer of buffers) {
-        const data = buffer.getChannelData(0)
-        for (let i = 0; i < data.length; i++) {
-            data[i] = next()
-        }
-    }
-    schedTime = audioCtx.currentTime + 0.1
-    sources[0].start(schedTime)
-    schedTime += buffers[0].duration
-    sources[1].start(schedTime)
-}
-
-function resumeContextOnInteraction(audioContext: AudioContext) {
-    // from https://github.com/captbaritone/winamp2-js/blob/a5a76f554c369637431fe809d16f3f7e06a21969/js/media/index.js#L8-L27
-    if (audioContext.state === "suspended") {
-        const resume = async () => {
-            await audioContext.resume()
-            if (audioContext.state === "running") {
-                document.body.removeEventListener("touchend", resume, false)
-                document.body.removeEventListener("click", resume, false)
-                document.body.removeEventListener("keydown", resume, false)
-                start()
-            }
-        }
-        document.body.addEventListener("touchend", resume, false)
-        document.body.addEventListener("click", resume, false)
-        document.body.addEventListener("keydown", resume, false)
-    } else {
-        start()
-    }
-}
-
-resumeContextOnInteraction(audioCtx)
-
-
-function convertTree(expr) {
-    let pos = 0
-    const recur = (expr) => {
-        let out = {}
-        const thisPos = pos
-        pos++
-        if (expr.type === "BinaryExpression") {
-            out = {
-                name: expr.operator,
-            }
-        } else if (expr.type === "UnaryExpression") {
-            out = {
-                name: expr.operator,
-            }
-        } else if (expr.type === "LiteralNumericExpression") {
-            out = {
-                name: expr.value,
-            }
-        } else if (expr.type === "IdentifierExpression") {
-            out = { name: expr.name }
-        }
-        Object.assign(out, {
-            subname: "",
-            fill: "white",
-            pos: thisPos,
-            children: children(expr).map(recur)
-        })
-        return out
-    }
-    return recur(expr)
-}
-
 let _update = null
 
 function genAtom() {
     // return Math.random() < 0.4 ? "t" : generateConstant()
-    return choice(ATOMS)
+    return choice(Math.random() < 0.3 ? NOTE_ATOMS : SAMPLE_ATOMS)
 }
 
-const ATOMS = ["bd", "sd", "hh"]
+const SAMPLE_ATOMS = ["bd", "sd", "hh"]
+const NOTE_ATOMS = ["c", "eb", "g", "bb"]
 const UNARY_FUNCS = ["degrade", "brak"]
 const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 
-function drawTree() {
+function setupTree() {
     // console.log(getDescendants(expr))
     // const treeData = convertTree(expr)
     const treeData = {
@@ -651,8 +517,7 @@ function drawTree() {
 
     
     function update(source) {
-        console.log("update", source)
-        console.log("new expr", root, convertTreeToExpression(root))
+        console.log("update", source, convertTreeToProgram(root))
         
         // Assigns the x and y position for the nodes
         var treeData = treemap(root);
@@ -801,26 +666,38 @@ function drawTree() {
     }
 }
 
+function convertTreeToProgram(tree) {
+    return convertTreeToExpression(tree)
+//     return `
+// samples('github:felixroos/samples')
+// samples('https://strudel.cc/tidal-drum-machines.json', 'github:ritchse/tidal-drum-machines/main/machines/')
+
+// ${convertTreeToExpression(tree)}
+// `
+}
+
 function convertTreeToExpression(tree) {
     console.log("???", tree, tree.data.name, tree.children?.length)
     if (tree.data.name === " ") { // HACK: Special case for root...
         return convertTreeToExpression(tree.children[0])
-    // } else if (tree.data.name === "~") {
-    //     return `~(${convertTreeToExpression(tree.children[0])})`
-    // } else if (BINARY_OPS.includes(tree.data.name)) {
-    //     return `(${convertTreeToExpression(tree.children[0])})${tree.data.name}(${convertTreeToExpression(tree.children[1])})`
-    } else if (ATOMS.includes(tree.data.name)) {
+    } else if (SAMPLE_ATOMS.includes(tree.data.name)) {
         return `s("${tree.data.name}")`
+    } else if (NOTE_ATOMS.includes(tree.data.name)) {
+        return `note("${tree.data.name}").s("piano")`
     } else {
         const args = tree.children.map(convertTreeToExpression).join(",")
         return `${tree.data.name}(${args})`
     }
 }
 
-drawTree()
+setupTree()
 
-initStrudel({
-    prebake: () => samples('github:tidalcycles/dirt-samples'),
-});
-document.getElementById('play').addEventListener('click', () => note('<c a f e>(3,8)').jux(rev).play());
-document.getElementById('stop').addEventListener('click', () => hush());
+// initStrudel({
+//     // prebake: () => samples('github:tidalcycles/dirt-samples'),
+//     prebake: () => registerSoundfonts(),
+// })
+
+const repl = document.createElement('strudel-editor');
+repl.setAttribute('code', `...`);
+document.getElementById('strudel').append(repl);
+console.log(repl.editor);
