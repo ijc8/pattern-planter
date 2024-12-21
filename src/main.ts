@@ -2,6 +2,7 @@ import { codeGen } from "shift-codegen"
 import { parseModule } from "shift-parser"
 // import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm"
 import * as d3 from "d3"
+import { initStrudel, evaluate, samples } from '@strudel/web';
 
 function weightedChoice<T extends { weight: number }>(choices: T[]) {
     const totalWeight = choices.reduce((acc, choice) => acc + choice.weight, 0)
@@ -71,35 +72,35 @@ const sources = [
     new AudioBufferSourceNode(audioCtx, { buffer: buffers[1] }),
 ]
 
-sources[0].connect(audioCtx.destination)
-sources[0].onended = () => {
-    const data = buffers[0].getChannelData(0)
-    for (let i = 0; i < data.length; i++) {
-        data[i] = next()
-    }
-    render(data)
-    const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] })
-    source.connect(audioCtx.destination)
-    source.onended = sources[0].onended
-    source.start(schedTime)
-    schedTime += buffers[0].duration
-    sources[0] = source
-}
+// sources[0].connect(audioCtx.destination)
+// sources[0].onended = () => {
+//     const data = buffers[0].getChannelData(0)
+//     for (let i = 0; i < data.length; i++) {
+//         data[i] = next()
+//     }
+//     render(data)
+//     const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[0] })
+//     source.connect(audioCtx.destination)
+//     source.onended = sources[0].onended
+//     source.start(schedTime)
+//     schedTime += buffers[0].duration
+//     sources[0] = source
+// }
 
-sources[1].connect(audioCtx.destination)
-sources[1].onended = () => {
-    const data = buffers[1].getChannelData(0)
-    for (let i = 0; i < data.length; i++) {
-        data[i] = next()
-    }
-    render(data)
-    const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[1] })
-    source.connect(audioCtx.destination)
-    source.onended = sources[1].onended
-    source.start(schedTime)
-    schedTime += buffers[1].duration
-    sources[1] = source
-}
+// sources[1].connect(audioCtx.destination)
+// sources[1].onended = () => {
+//     const data = buffers[1].getChannelData(0)
+//     for (let i = 0; i < data.length; i++) {
+//         data[i] = next()
+//     }
+//     render(data)
+//     const source = new AudioBufferSourceNode(audioCtx, { buffer: buffers[1] })
+//     source.connect(audioCtx.destination)
+//     source.onended = sources[1].onended
+//     source.start(schedTime)
+//     schedTime += buffers[1].duration
+//     sources[1] = source
+// }
 
 function mod(n: number, m: number) {
     return ((n % m) + m) % m;
@@ -124,7 +125,8 @@ input.onchange = e => {
 
 function playTree(tree) {
     input.value = convertTreeToExpression(tree)
-    input.dispatchEvent(new Event("change"))
+    // input.dispatchEvent(new Event("change"))
+    evaluate(input.value)
 }
 
 const resetButton = document.querySelector<HTMLButtonElement>("#reset")!
@@ -490,12 +492,25 @@ function convertTree(expr) {
 let _update = null
 
 function genAtom() {
-    return Math.random() < 0.4 ? "t" : generateConstant()
+    // return Math.random() < 0.4 ? "t" : generateConstant()
+    return choice(ATOMS)
 }
 
-function drawTree(expr) {
-    console.log(getDescendants(expr))
-    const treeData = convertTree(expr)
+const ATOMS = ["bd", "sd", "hh"]
+const UNARY_FUNCS = ["degrade", "brak"]
+const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
+
+function drawTree() {
+    // console.log(getDescendants(expr))
+    // const treeData = convertTree(expr)
+    const treeData = {
+        name: " ",
+        fill: "white",
+        children: [{
+            name: "bd",
+            fill: "white"
+        }],
+    }
     
     // https://stackoverflow.com/questions/69975911/rotate-tree-diagram-on-d3-js-v5-from-horizental-to-vertical
     // Set the dimensions and margins of the diagram
@@ -552,46 +567,56 @@ function drawTree(expr) {
 
     function clickNode(e, d) {
         console.log("clickNode", e, d)
-        if (d.children) {
-            console.log("not a leaf node")
-            return
-        }
-        const parent = d.parent
-        const index = parent.children.indexOf(d)
-        const type = Math.random() < 0.25 ? "unary" : "binary"
-        const replacement = Object.assign(new Node, {
-            parent,
-            depth: d.depth,
-            data: {
-                name: type === "unary" ? "~" : choice(BINARY_OPS),
-                fill: "white",
-            }
-        })
-        replacement.children = [Object.assign(new Node, {
-            parent: replacement,
-            depth: replacement.depth + 1,
-            data: {
-                name: d.data.name,
-                fill: "white",
-            }
-        })]
-        if (type === "binary") {
-            replacement.children.push(Object.assign(new Node, {
-                parent: replacement,
-                depth: replacement.depth + 1,
+        if (UNARY_FUNCS.includes(d.data.name)) {
+            console.log("can't grow this")
+        } else if (VARIADIC_FUNCS.includes(d.data.name)) {
+            d.children.push(Object.assign(new Node, {
+                parent: d,
+                depth: d.depth + 1,
                 data: {
                     name: genAtom(),
                     fill: "white",
                 }
             }))
-            if (Math.random() < 0.5) {
-                const tmp = replacement.children[0]
-                replacement.children[0] = replacement.children[1]
-                replacement.children[1] = tmp
+        } else {
+            // Atom; replace
+            const parent = d.parent
+            const index = parent.children.indexOf(d)
+            const type = Math.random() < 0.25 ? "unary" : "variadic"
+            const replacement = Object.assign(new Node, {
+                parent,
+                depth: d.depth,
+                data: {
+                    name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
+                    fill: "white",
+                }
+            })
+            replacement.children = [Object.assign(new Node, {
+                parent: replacement,
+                depth: replacement.depth + 1,
+                data: {
+                    name: d.data.name,
+                    fill: "white",
+                }
+            })]
+            if (type === "variadic") {
+                replacement.children.push(Object.assign(new Node, {
+                    parent: replacement,
+                    depth: replacement.depth + 1,
+                    data: {
+                        name: genAtom(),
+                        fill: "white",
+                    }
+                }))
+                if (Math.random() < 0.5) {
+                    const tmp = replacement.children[0]
+                    replacement.children[0] = replacement.children[1]
+                    replacement.children[1] = tmp
+                }
             }
+            parent.children[index] = replacement
+            // replaceObject(d, replacement)
         }
-        parent.children[index] = replacement
-        // replaceObject(d, replacement)
         update(d)
         e.stopPropagation()
         playTree(root)
@@ -780,19 +805,22 @@ function convertTreeToExpression(tree) {
     console.log("???", tree, tree.data.name, tree.children?.length)
     if (tree.data.name === " ") { // HACK: Special case for root...
         return convertTreeToExpression(tree.children[0])
-    } else if (tree.data.name === "~") {
-        return `~(${convertTreeToExpression(tree.children[0])})`
-    } else if (BINARY_OPS.includes(tree.data.name)) {
-        return `(${convertTreeToExpression(tree.children[0])})${tree.data.name}(${convertTreeToExpression(tree.children[1])})`
+    // } else if (tree.data.name === "~") {
+    //     return `~(${convertTreeToExpression(tree.children[0])})`
+    // } else if (BINARY_OPS.includes(tree.data.name)) {
+    //     return `(${convertTreeToExpression(tree.children[0])})${tree.data.name}(${convertTreeToExpression(tree.children[1])})`
+    } else if (ATOMS.includes(tree.data.name)) {
+        return `s("${tree.data.name}")`
     } else {
-        return tree.data.name
+        const args = tree.children.map(convertTreeToExpression).join(",")
+        return `${tree.data.name}(${args})`
     }
 }
 
-drawTree({
-    type: "UnaryExpression",
-    operator: " ",
-    operand: {
-        type: "LiteralNumericExpression", value: 0
-    },
-})
+drawTree()
+
+initStrudel({
+    prebake: () => samples('github:tidalcycles/dirt-samples'),
+});
+document.getElementById('play').addEventListener('click', () => note('<c a f e>(3,8)').jux(rev).play());
+document.getElementById('stop').addEventListener('click', () => hush());
