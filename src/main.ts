@@ -33,11 +33,17 @@ function replaceObject(target: any, source: any) {
     Object.assign(target, source)
 }
 
-function playTree(tree) {
+const NUM_TREES = 8
+const sources = [...new Array(NUM_TREES)].map(() => "silence")
+
+function playTree(tree, treeIndex) {
     // input.value = convertTreeToProgram(tree)
     // input.dispatchEvent(new Event("change"))
     // evaluate(input.value)
-    repl.editor.setCode(convertTreeToProgram(tree))
+    sources[treeIndex] = convertTreeToExpression(tree)
+    const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
+    const program = `// greetings from atlanta (data dancers)\nstack(${panned.join(",")})`
+    repl.editor.setCode(program)
     repl.editor.evaluate()
 }
 
@@ -257,16 +263,14 @@ const changeRules = [{
     weight: 1,
 }]
 
-let _update = null
-
 function genAtom() {
     // return Math.random() < 0.4 ? "t" : generateConstant()
     return choice(Math.random() < 0.3 ? NOTE_ATOMS : SAMPLE_ATOMS)
 }
 
-const SAMPLE_ATOMS = ["bd", "sd", "hh"]
-const NOTE_ATOMS = ["c", "eb", "g", "bb"]
-const UNARY_FUNCS = ["degrade", "brak"]
+const SAMPLE_ATOMS = ["ocarina_small_stacc", "guiro", "psaltery_pluck", "sleighbells", "folkharp", "didgeridoo", "insect", "insect:2", "wind", "crow", "east", "~"]
+const NOTE_ATOMS = ["c2", "eb2", "g2", "bb2", "c3", "eb3", "g3", "bb3", "c", "eb", "g", "bb"]
+const UNARY_FUNCS = ["degrade", "brak", "rev"]
 const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 
 function setupTree() {
@@ -276,273 +280,274 @@ function setupTree() {
         name: " ",
         fill: "white",
         children: [{
-            name: "bd",
+            name: "~",
             fill: "white"
         }],
     }
-    
+
     // https://stackoverflow.com/questions/69975911/rotate-tree-diagram-on-d3-js-v5-from-horizental-to-vertical
     // Set the dimensions and margins of the diagram
     const margin = {top: 20, right: 90, bottom: 30, left: 90},
-        width = 960 - margin.left - margin.right,
-        height = 500 - margin.top - margin.bottom;
+        width = 1920 - margin.left - margin.right,
+        height = 800 - margin.top - margin.bottom;
+    const _svg = d3.select("#planter").append("svg")
+        .attr("width", width + margin.right + margin.left)
+        .attr("height", height + margin.top + margin.bottom)
 
-    _update = update
+    for (let treeIndex = 0; treeIndex < NUM_TREES; treeIndex++) {
 
-    function clickTree(e) {
-        console.log("clickTree", e)
-    }
+        function clickTree(e) {
+            console.log("clickTree", e)
+        }
 
-    function clickLink(e, d) {
-        console.log("clickLink", e, d)
-        const parent = d.parent
-        const index = parent.children.indexOf(d)
-        console.log("index", index)
-        parent.children[index] = Object.assign(new Node, {
-            parent,
-            depth: parent.depth + 1,
-            data: {
-                name: genAtom(),
-                fill: "white",
-            }
-        })
-        update(d)
-        e.stopPropagation()
-        playTree(root)
-
-    }
-
-    function clickNode(e, d) {
-        console.log("clickNode", e, d)
-        if (UNARY_FUNCS.includes(d.data.name)) {
-            console.log("can't grow this")
-        } else if (VARIADIC_FUNCS.includes(d.data.name)) {
-            d.children.push(Object.assign(new Node, {
-                parent: d,
-                depth: d.depth + 1,
+        function clickLink(e, d) {
+            console.log("clickLink", e, d)
+            const parent = d.parent
+            const index = parent.children.indexOf(d)
+            console.log("index", index)
+            parent.children[index] = Object.assign(new Node, {
+                parent,
+                depth: parent.depth + 1,
                 data: {
                     name: genAtom(),
                     fill: "white",
                 }
-            }))
-        } else {
-            // Atom; replace
-            const parent = d.parent
-            const index = parent.children.indexOf(d)
-            const type = Math.random() < 0.25 ? "unary" : "variadic"
-            const replacement = Object.assign(new Node, {
-                parent,
-                depth: d.depth,
-                data: {
-                    name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
-                    fill: "white",
-                }
             })
-            replacement.children = [Object.assign(new Node, {
-                parent: replacement,
-                depth: replacement.depth + 1,
-                data: {
-                    name: d.data.name,
-                    fill: "white",
-                }
-            })]
-            if (type === "variadic") {
-                replacement.children.push(Object.assign(new Node, {
-                    parent: replacement,
-                    depth: replacement.depth + 1,
+            update(d)
+            e.stopPropagation()
+            playTree(root, treeIndex)
+
+        }
+
+        function clickNode(e, d) {
+            console.log("clickNode", e, d)
+            if (UNARY_FUNCS.includes(d.data.name)) {
+                console.log("can't grow this")
+            } else if (VARIADIC_FUNCS.includes(d.data.name)) {
+                d.children.push(Object.assign(new Node, {
+                    parent: d,
+                    depth: d.depth + 1,
                     data: {
                         name: genAtom(),
                         fill: "white",
                     }
                 }))
-                if (Math.random() < 0.5) {
-                    const tmp = replacement.children[0]
-                    replacement.children[0] = replacement.children[1]
-                    replacement.children[1] = tmp
+            } else {
+                // Atom; replace
+                const parent = d.parent
+                const index = parent.children.indexOf(d)
+                const type = Math.random() < 0.25 ? "unary" : "variadic"
+                const replacement = Object.assign(new Node, {
+                    parent,
+                    depth: d.depth,
+                    data: {
+                        name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
+                        fill: "white",
+                    }
+                })
+                replacement.children = [Object.assign(new Node, {
+                    parent: replacement,
+                    depth: replacement.depth + 1,
+                    data: {
+                        name: d.data.name,
+                        fill: "white",
+                    }
+                })]
+                if (type === "variadic") {
+                    replacement.children.push(Object.assign(new Node, {
+                        parent: replacement,
+                        depth: replacement.depth + 1,
+                        data: {
+                            name: genAtom(),
+                            fill: "white",
+                        }
+                    }))
+                    if (Math.random() < 0.5) {
+                        const tmp = replacement.children[0]
+                        replacement.children[0] = replacement.children[1]
+                        replacement.children[1] = tmp
+                    }
                 }
+                parent.children[index] = replacement
+                // replaceObject(d, replacement)
             }
-            parent.children[index] = replacement
-            // replaceObject(d, replacement)
+            update(d)
+            e.stopPropagation()
+            playTree(root, treeIndex)
         }
-        update(d)
-        e.stopPropagation()
-        playTree(root)
-    }
-    
-    // append the svg object to the body of the page
-    // appends a 'group' element to 'svg'
-    // moves the 'group' element to the top left margin
-    var svg = d3.select("#planter").append("svg")
-        .on("click", clickTree)
-        .attr("width", width + margin.right + margin.left)
-        .attr("height", height + margin.top + margin.bottom)
-        .append("g")
-        .attr("transform", "translate(" + margin.left + "," + (height - margin.top) + ")");
+        
+        // append the svg object to the body of the page
+        // appends a 'group' element to 'svg'
+        // moves the 'group' element to the top left margin
+        const svg = _svg
+            .append("g")
+            .on("click", clickTree)
+            .attr("transform", "translate(" + (margin.left + treeIndex * (width / NUM_TREES)) + "," + (height - margin.top) + ")");
 
-    var i = 0, duration = 750, root;
-    
-    // declares a tree layout and assigns the size
-    var treemap = d3.tree().size([height, width]);
-    
-    // Assigns parent, children, height, depth
-    root = d3.hierarchy(treeData, function(d) { return d.children; });
-    root.x0 = height / 2;
-    root.y0 = 0;
-    
-    // Collapse after the second level
-    // root.children.forEach(collapse);
-    
-    update(root);
+        let i = 0, duration = 2000, root;
+        
+        // declares a tree layout and assigns the size
+        let treemap = d3.tree().size([width / NUM_TREES, height]);
+        
+        // Assigns parent, children, height, depth
+        root = d3.hierarchy(treeData, function(d) { return d.children; });
+        root.x0 = height / 2;
+        root.y0 = 0;
+        
+        // Collapse after the second level
+        // root.children.forEach(collapse);
+        
+        update(root);
 
-    const Node = d3.hierarchy.prototype.constructor
-
-    
-    function update(source) {
-        console.log("update", source, convertTreeToProgram(root))
+        const Node = d3.hierarchy.prototype.constructor
         
-        // Assigns the x and y position for the nodes
-        var treeData = treemap(root);
-        
-        // Compute the new tree layout.
-        var nodes = treeData.descendants(),
-        links = treeData.descendants().slice(1);
-        
-        // Normalize for fixed-depth.
-        nodes.forEach(function(d){ d.y = d.depth * 30}); 
-        
-        // ****************** Nodes section ***************************
-        
-        // Update the nodes...
-        var node = svg.selectAll('g.node')
-            .data(nodes, function(d) {return d.id || (d.id = ++i); });
-        
-        // Enter any new nodes at the parent's previous position.
-        var nodeEnter = node.enter().append('g')
-            .attr('class', 'node')
-            .attr("transform", function(d) {
-                // BEFORE ....
-                //return "translate(" + source.y0 + "," + source.x0 + ")";
-                // AFTER ....
-                return "translate(" + source.x0 + "," + -source.y0 + ")";
-            })
-            .on('click', clickNode);
-        
-        // var rectHeight = 60, rectWidth = 120;
-        const rectHeight = 20, rectWidth = 20
-        
-        nodeEnter.append('rect')
-            .attr('class', 'node')
-            .attr("width", rectWidth)
-            .attr("height", rectHeight)
-            .attr("x", 0)
-            .attr("y", (rectHeight/2)*-1)
-            .attr("rx","5")
-            .style("fill", function(d) {
-                return d.data.fill;
-            })
-            .style("stroke", "black");
-        
-        // Add labels for the nodes
-        nodeEnter.append('text')
-            .attr("class", "node-text")
-            .attr("dy", ".35em")
-            .attr("x", function(d) {
-                return rectWidth / 2;
-            })
-            .attr("text-anchor", function(d) {
-                return "middle";
-            })
-            .text(function(d) { return d.data.name; })
-        
-        // UPDATE
-        var nodeUpdate = nodeEnter.merge(node);
-        
-        // Transition to the proper position for the node
-        nodeUpdate.transition()
-            .duration(duration)
-            .attr("transform", function(d) { 
-                // BEFORE ....
-                //return "translate(" + d.y + "," + d.x + ")";
-                // AFTER ....
-                return "translate(" + d.x + "," + -d.y + ")";
-            });
-        
-        // Update the node attributes and style
-        nodeUpdate.select('circle.node')
-            .attr('r', 10)
-            .style("fill", function(d) {
-                return d._children ? "lightsteelblue" : "#fff";
-            })
-            .attr('cursor', 'pointer');
-        
-        
-        // Remove any exiting nodes
-        var nodeExit = node.exit().transition()
-            .duration(duration)
-            .attr("transform", function(d) {
-                // BEFORE ....
-                //return "translate(" + source.y + "," + source.x + ")";
-                // AFTER ....
-                return "translate(" + source.x + "," + -source.y + ")";
-            })
-            .remove();
-        
-        // On exit reduce the node circles size to 0
-        nodeExit.select('circle')
-            .attr('r', 1e-6);
-        
-        // On exit reduce the opacity of text labels
-        nodeExit.select('text')
-            .style('fill-opacity', 1e-6);
-        
-        // ****************** links section ***************************
-        
-        // Update the links...
-        var link = svg.selectAll('path.link')
-            .data(links, d => d.id);
-        
-        // Enter any new links at the parent's previous position.
-        var linkEnter = link.enter().insert('path', "g")
-            .attr("class", "link")
-            .on("click", clickLink)
-            .attr("stroke", "black")
-            .attr("stroke-width", 3)
-            .attr('d', function(d){
-                var o = {x: source.x0, y: source.y0}
-                return diagonal(o, o)
-            });
-        
-        // UPDATE
-        var linkUpdate = linkEnter.merge(link);
-        
-        // Transition back to the parent element position
-        linkUpdate.transition()
-            .duration(duration)
-            .attr('d', function(d){ return diagonal(d, d.parent) });
-        
-        // Remove any exiting links
-        var linkExit = link.exit().transition()
-            .duration(duration)
-            .attr('d', function(d) {
-                var o = {x: source.x, y: source.y}
-                return diagonal(o, o)
-            })
-            .remove();
-        
-        // Store the old positions for transition.
-        nodes.forEach(function(d){
-            d.x0 = d.x;
-            d.y0 = d.y;
-        });
-        
-        // Creates a curved (diagonal) path from parent to the child nodes
-        function diagonal(s, d) {
-            const path = `M ${s.x + (rectWidth / 2)} ${-s.y}
-                C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-s.y},
-                ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-d.y},
-                ${d.x + (rectWidth / 2)} ${-d.y}`
+        function update(source) {
+            console.log("update", source, convertTreeToProgram(root))
             
-            return path
+            // Assigns the x and y position for the nodes
+            var treeData = treemap(root);
+            
+            // Compute the new tree layout.
+            var nodes = treeData.descendants(),
+            links = treeData.descendants().slice(1);
+            
+            // Normalize for fixed-depth.
+            nodes.forEach(function(d){ d.y = d.depth * 50}); 
+            
+            // ****************** Nodes section ***************************
+            
+            // Update the nodes...
+            var node = svg.selectAll('g.node')
+                .data(nodes, function(d) {return d.id || (d.id = ++i); });
+            
+            // Enter any new nodes at the parent's previous position.
+            var nodeEnter = node.enter().append('g')
+                .attr('class', 'node')
+                .attr("transform", function(d) {
+                    // BEFORE ....
+                    //return "translate(" + source.y0 + "," + source.x0 + ")";
+                    // AFTER ....
+                    return "translate(" + source.x0 + "," + -source.y0 + ")";
+                })
+                .on('click', clickNode);
+            
+            // var rectHeight = 60, rectWidth = 120;
+            const rectHeight = 20, rectWidth = 20
+            
+            nodeEnter.append('rect')
+                .attr('class', 'node')
+                .attr("width", rectWidth)
+                .attr("height", rectHeight)
+                .attr("x", 0)
+                .attr("y", (rectHeight/2)*-1)
+                .attr("rx","5")
+                .style("fill", function(d) {
+                    return d.data.fill;
+                })
+                .style("stroke", "black");
+            
+            // Add labels for the nodes
+            nodeEnter.append('text')
+                .attr("class", "node-text")
+                .attr("dy", ".35em")
+                .attr("x", function(d) {
+                    return rectWidth / 2;
+                })
+                .attr("text-anchor", function(d) {
+                    return "middle";
+                })
+                .text(function(d) { return d.data.name; })
+            
+            // UPDATE
+            var nodeUpdate = nodeEnter.merge(node);
+            
+            // Transition to the proper position for the node
+            nodeUpdate.transition()
+                .duration(duration)
+                .attr("transform", function(d) { 
+                    // BEFORE ....
+                    //return "translate(" + d.y + "," + d.x + ")";
+                    // AFTER ....
+                    return "translate(" + d.x + "," + -d.y + ")";
+                });
+            
+            // Update the node attributes and style
+            nodeUpdate.select('circle.node')
+                .attr('r', 10)
+                .style("fill", function(d) {
+                    return d._children ? "lightsteelblue" : "#fff";
+                })
+                .attr('cursor', 'pointer');
+            
+            
+            // Remove any exiting nodes
+            var nodeExit = node.exit().transition()
+                .duration(duration)
+                .attr("transform", function(d) {
+                    // BEFORE ....
+                    //return "translate(" + source.y + "," + source.x + ")";
+                    // AFTER ....
+                    return "translate(" + source.x + "," + -source.y + ")";
+                })
+                .remove();
+            
+            // On exit reduce the node circles size to 0
+            nodeExit.select('circle')
+                .attr('r', 1e-6);
+            
+            // On exit reduce the opacity of text labels
+            nodeExit.select('text')
+                .style('fill-opacity', 1e-6);
+            
+            // ****************** links section ***************************
+            
+            // Update the links...
+            var link = svg.selectAll('path.link')
+                .data(links, d => d.id);
+            
+            // Enter any new links at the parent's previous position.
+            var linkEnter = link.enter().insert('path', "g")
+                .attr("class", "link")
+                .on("click", clickLink)
+                .attr("stroke", "black")
+                .attr("stroke-width", 3)
+                .attr('d', function(d){
+                    var o = {x: source.x0, y: source.y0}
+                    return diagonal(o, o)
+                });
+            
+            // UPDATE
+            var linkUpdate = linkEnter.merge(link);
+            
+            // Transition back to the parent element position
+            linkUpdate.transition()
+                .duration(duration)
+                .attr('d', function(d){ return diagonal(d, d.parent) });
+            
+            // Remove any exiting links
+            var linkExit = link.exit().transition()
+                .duration(duration)
+                .attr('d', function(d) {
+                    var o = {x: source.x, y: source.y}
+                    return diagonal(o, o)
+                })
+                .remove();
+            
+            // Store the old positions for transition.
+            nodes.forEach(function(d){
+                d.x0 = d.x;
+                d.y0 = d.y;
+            });
+
+            // Creates a curved (diagonal) path from parent to the child nodes
+            function diagonal(s, d) {
+                const path = `M ${s.x + (rectWidth / 2)} ${-s.y}
+                    C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-s.y},
+                    ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-d.y},
+                    ${d.x + (rectWidth / 2)} ${-d.y}`
+                
+                return path
+            }
         }
     }
 }
