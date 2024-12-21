@@ -377,7 +377,7 @@ function setupTree() {
         .attr("width", width + margin.right + margin.left)
         .attr("height", height + margin.top + margin.bottom)
         .append("g")
-        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+        .attr("transform", "translate(" + margin.left + "," + (height - margin.top) + ")");
 
     var i = 0, duration = 750, root;
     
@@ -423,7 +423,7 @@ function setupTree() {
                 // BEFORE ....
                 //return "translate(" + source.y0 + "," + source.x0 + ")";
                 // AFTER ....
-                return "translate(" + source.x0 + "," + source.y0 + ")";
+                return "translate(" + source.x0 + "," + -source.y0 + ")";
             })
             .on('click', clickNode);
         
@@ -464,7 +464,7 @@ function setupTree() {
                 // BEFORE ....
                 //return "translate(" + d.y + "," + d.x + ")";
                 // AFTER ....
-                return "translate(" + d.x + "," + d.y + ")";
+                return "translate(" + d.x + "," + -d.y + ")";
             });
         
         // Update the node attributes and style
@@ -483,7 +483,7 @@ function setupTree() {
                 // BEFORE ....
                 //return "translate(" + source.y + "," + source.x + ")";
                 // AFTER ....
-                return "translate(" + source.x + "," + source.y + ")";
+                return "translate(" + source.x + "," + -source.y + ")";
             })
             .remove();
         
@@ -537,10 +537,10 @@ function setupTree() {
         
         // Creates a curved (diagonal) path from parent to the child nodes
         function diagonal(s, d) {
-            const path = `M ${s.x + (rectWidth / 2)} ${s.y}
-                C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${s.y},
-                ${(s.x + d.x) / 2 + (rectWidth / 2)} ${d.y},
-                ${d.x + (rectWidth / 2)} ${d.y}`
+            const path = `M ${s.x + (rectWidth / 2)} ${-s.y}
+                C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-s.y},
+                ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-d.y},
+                ${d.x + (rectWidth / 2)} ${-d.y}`
             
             return path
         }
