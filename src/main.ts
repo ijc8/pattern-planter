@@ -1,282 +1,42 @@
-import { codeGen } from "shift-codegen"
-import { parseModule } from "shift-parser"
-// import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm"
 import * as d3 from "d3"
-
-function weightedChoice<T extends { weight: number }>(choices: T[]) {
-    const totalWeight = choices.reduce((acc, choice) => acc + choice.weight, 0)
-    let p = Math.random()
-    for (const choice of choices) {
-        const prob = choice.weight / totalWeight
-        if (p < prob) return choice
-        p -= prob
-    }
-    return undefined
-}
-
-function children(node: any) {
-    if (node.type === "ConditionalExpression") {
-        return [node.test, node.consequent, node.alternate]
-    } else if (node.type === "BinaryExpression") {
-        return [node.left, node.right]
-    } else if (node.type === "UnaryExpression") {
-        return [node.operand]
-    } else {
-        return []
-    }
-}
-
-function replaceObject(target: any, source: any) {
-    for (const prop of Object.getOwnPropertyNames(target)) {
-        delete target[prop]
-    }
-    Object.assign(target, source)
-}
-
-const NUM_TREES = 8
-const sources = [...new Array(NUM_TREES)].map(() => "silence")
-
-function playTree(tree, treeIndex) {
-    // input.value = convertTreeToProgram(tree)
-    // input.dispatchEvent(new Event("change"))
-    // evaluate(input.value)
-    sources[treeIndex] = convertTreeToExpression(tree)
-    const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
-    const program = `// greetings from atlanta (data dancers)\nstack(${panned.join(",")})`
-    repl.editor.setCode(program)
-    repl.editor.evaluate()
-}
-
-function sleep(ms: number) {
-    return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-function getExpression(warn=true) {
-    let mod
-    try {
-        mod = parseModule(input.value)
-    } catch {}
-    if (!mod || mod.items.length !== 1 || mod.items[0].type !== "ExpressionStatement") {
-        if (warn) alert("Please enter a valid expression.")
-            return null
-    }
-    return mod.items[0].expression
-}
-
-function generateExpression(depth: number, mustUseTime=false): any {
-    const p = Math.random()
-    if (depth === 0 || p < 0.1) {
-        return generateAtom(mustUseTime)
-    } else if (p < 0.2) {
-        return generateUnaryExpression(depth, mustUseTime)
-    } else if (p < 0.25) {
-        return generateTernaryExpression(depth, mustUseTime)
-    } else {
-        return generateBinaryExpression(depth, mustUseTime)
-    }
-}
-
-function generateConstant() {
-    // Larger numbers should be less likely. (Also, we skip 0.)
-    return Math.floor(Math.random() * (1/Math.random())) + 1
-}
-
-function generateAtom(mustUseTime=false) {
-    const p = Math.random()
-    const probT = 0.4
-    if (mustUseTime || p < probT) {
-        return { type: "IdentifierExpression", name: "t" }
-    } else {
-        return { type: "LiteralNumericExpression", value: generateConstant() }
-    }
-}
-
-function generateUnaryExpression(depth: number, mustUseTime=false) {
-    return {
-        type: "UnaryExpression",
-        operator: "~",
-        operand: generateExpression(depth-1, mustUseTime)
-    }
-}
-
-function choice(array: any[]) {
-    return array[Math.floor(Math.random() * array.length)]
-}
-
-function generateBinaryExpression(depth: number, mustUseTime=false) {
-    const operator = choice(BINARY_OPS)
-    const pos = Math.random() > 0.5
-    return {
-        type: "BinaryExpression",
-        left: generateExpression(depth-1, mustUseTime && pos),
-        operator,
-        right: generateExpression(depth-1, mustUseTime && !pos),
-    }
-}
-
-function generateTernaryExpression(depth: number, mustUseTime=false) {
-    const ops = ["<","<=",">=",">","==","!="]
-    const operator = ops[Math.floor(Math.random() * ops.length)]
-    const pos = Math.floor(Math.random() * 4)
-    return {
-        type: "ConditionalExpression",
-        test: {
-            type: "BinaryExpression",
-            left: generateExpression(depth-1, mustUseTime && (pos === 0)),
-            operator,
-            right: generateExpression(depth-1, mustUseTime && (pos === 1)),
-        },
-        consequent: generateExpression(depth-1, mustUseTime && (pos === 2)),
-        alternate: generateExpression(depth-1, mustUseTime && (pos === 3)),
-    }
-}
-
-function getDescendants(root: any) {
-    const stack = [root]
-    const descendants = []
-    while (stack.length) {
-        const node = stack.pop()
-        descendants.push(node)
-        for (const child of children(node).reverse()) {
-            stack.push(child)
-        }
-    }
-    return descendants
-}
-
-interface Rule {
-    name: string
-    type?: string
-    apply: (node: any) => any
-    weight: number
-}
-
-const BINARY_OPS = ["<<",">>","+","-","*","/","%","|","&","^"]
-
-const growRules = [{
-    // expr -> `expr <op> atom` or `atom <op> expr`
-    name: "growBinaryOp",
-    apply(node: any) {
-        const pos = Math.random() < 0.5
-        const operator = BINARY_OPS[Math.floor(Math.random() * BINARY_OPS.length)]
-        return {
-            type: "BinaryExpression",
-            left: pos ? node : generateAtom(),
-            operator,
-            right: pos ? generateAtom() : node,
-        }
-    },
-    weight: 3,
-}, {
-    // x -> ~x
-    name: "growUnaryOp",
-    apply: (node: any) => ({
-        type: "UnaryExpression",
-        operator: "~",
-        operand: node,
-    }),
-    weight: 1,
-}]
-
-function applyRandomRule(expr: any, rules: Rule[]) {
-    // Get all nodes to which at least one rule applies.
-    const nodes = getDescendants(expr).filter(node => rules.some(
-        rule => !rule.type || rule.type === node.type
-    ))
-    // Randomly select node.
-    if (nodes.length === 0) {
-        console.log("No matching nodes!")
-        return
-    }
-    const dst = nodes[Math.floor(Math.random() * nodes.length)]
-    const copy = JSON.parse(JSON.stringify(dst))
-    // Randomly select applicable rule using weights.
-    const applicable = rules.filter(rule => !rule.type || rule.type === dst.type)
-    const rule = weightedChoice(applicable)!
-    // Apply selected rule.
-    console.log("Applying rule:", rule.name)
-    replaceObject(dst, rule.apply(copy))
-}
-
-const shrinkRules = [{
-    // x <op> y -> `x` or `y`
-    // NOTE: Currently this applies anywhere in the tree, so it could lop off most of the expression
-    // in one step. Might be better if it only applies to BinaryExpressions containing a leaf node.
-    name: "shrinkBinaryOp",
-    type: "BinaryExpression",
-    apply: (node: any) => Math.random() < 0.5 ? node.left : node.right,
-    weight: 1,
-}, {
-    // ~x -> x
-    name: "shrinkUnaryOp",
-    type: "UnaryExpression",
-    apply: (node: any) => node.operand,
-    weight: 1,
-}]
-
-const changeRules = [{
-    // x <op> y -> x <different op> y
-    name: "switchBinaryOp",
-    type: "BinaryExpression",
-    apply: (node: any) => ({
-        ...node,
-        operator: BINARY_OPS.filter(op => op !== node.operator)[Math.floor(Math.random() * (BINARY_OPS.length - 1))]
-    }),
-    weight: 2,
-}, {
-    // x <op> y -> y <op> x
-    // NOTE: Currently this also applies to commutative operators: +, *, &, |, ^. Would be nice to exclude those.
-    name: "swapBinaryOp",
-    type: "BinaryExpression",
-    apply: (node: any) => ({
-        ...node,
-        left: node.right,
-        right: node.left,
-    }),
-    weight: 1,
-}, {
-    // t -> <constant>
-    name: "variableToConstant",
-    type: "IdentifierExpression",
-    apply: () => ({
-        type: "LiteralNumericExpression",
-        value: generateConstant(),
-    }),
-    weight: 1,
-}, {
-    // <constant> -> t
-    name: "constantToVariable",
-    type: "LiteralNumericExpression",
-    apply: () => ({
-        type: "IdentifierExpression",
-        name: "t",
-    }),
-    weight: 1,
-}, {
-    // <constant> -> <constant>
-    name: "switchConstant",
-    type: "LiteralNumericExpression",
-    apply: () => ({
-        type: "LiteralNumericExpression",
-        value: generateConstant(),
-    }),
-    weight: 1,
-}]
-
-function genAtom() {
-    // return Math.random() < 0.4 ? "t" : generateConstant()
-    return choice(Math.random() < 0.3 ? NOTE_ATOMS : SAMPLE_ATOMS)
-}
 
 const SAMPLE_ATOMS = ["ocarina_small_stacc", "guiro", "psaltery_pluck", "sleighbells", "folkharp", "didgeridoo", "insect", "insect:2", "wind", "crow", "east", "~"]
 const NOTE_ATOMS = ["c2", "eb2", "g2", "bb2", "c3", "eb3", "g3", "bb3", "c", "eb", "g", "bb"]
 const UNARY_FUNCS = ["degrade", "brak", "rev"]
 const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 
+const NUM_TREES = 8
+const sources = [...new Array(NUM_TREES)].map(() => "silence")
+
+function choice(array: any[]) {
+    return array[Math.floor(Math.random() * array.length)]
+}
+
+function genAtom() {
+    return choice(Math.random() < 0.3 ? NOTE_ATOMS : SAMPLE_ATOMS)
+}
+
+interface Point {
+    x: number
+    y: number
+}
+
+interface Node {
+    name: string
+    fill: string
+}
+
+interface Tree extends Node {
+    children?: Tree[]
+}
+
+interface PointNode extends Node {
+    x0: number
+    y0: number
+}
+
 function setupTree() {
-    // console.log(getDescendants(expr))
-    // const treeData = convertTree(expr)
-    const treeData = {
+    const treeData: Tree = {
         name: " ",
         fill: "white",
         children: [{
@@ -285,27 +45,30 @@ function setupTree() {
         }],
     }
 
+    // Lots of code here to try to correctly animate tree growth and decay, originally based on some d3 example code.
+    // Unfortunately it is a) gross and b) kind of broken. On the other hand, I got something working in time for the gig. :-)
+
     // https://stackoverflow.com/questions/69975911/rotate-tree-diagram-on-d3-js-v5-from-horizental-to-vertical
     // Set the dimensions and margins of the diagram
     const margin = {top: 20, right: 90, bottom: 30, left: 90},
         width = 1920 - margin.left - margin.right,
-        height = 800 - margin.top - margin.bottom;
+        height = 800 - margin.top - margin.bottom
     const _svg = d3.select("#planter").append("svg")
         .attr("width", width + margin.right + margin.left)
         .attr("height", height + margin.top + margin.bottom)
 
     for (let treeIndex = 0; treeIndex < NUM_TREES; treeIndex++) {
 
-        function clickTree(e) {
+        function clickTree(e: any) {
             console.log("clickTree", e)
         }
 
-        function clickLink(e, d) {
+        function clickLink(e: Event, d: d3.HierarchyPointNode<PointNode>) {
             console.log("clickLink", e, d)
-            const parent = d.parent
-            const index = parent.children.indexOf(d)
+            const parent = d.parent!
+            const index = parent.children!.indexOf(d)
             console.log("index", index)
-            parent.children[index] = Object.assign(new Node, {
+            parent.children![index] = Object.assign(new Node, {
                 parent,
                 depth: parent.depth + 1,
                 data: {
@@ -319,12 +82,12 @@ function setupTree() {
 
         }
 
-        function clickNode(e, d) {
+        function clickNode(e: Event, d: d3.HierarchyPointNode<PointNode>) {
             console.log("clickNode", e, d)
             if (UNARY_FUNCS.includes(d.data.name)) {
                 console.log("can't grow this")
             } else if (VARIADIC_FUNCS.includes(d.data.name)) {
-                d.children.push(Object.assign(new Node, {
+                d.children!.push(Object.assign(new Node, {
                     parent: d,
                     depth: d.depth + 1,
                     data: {
@@ -334,8 +97,8 @@ function setupTree() {
                 }))
             } else {
                 // Atom; replace
-                const parent = d.parent
-                const index = parent.children.indexOf(d)
+                const parent = d.parent!
+                const index = parent.children!.indexOf(d)
                 const type = Math.random() < 0.25 ? "unary" : "variadic"
                 const replacement = Object.assign(new Node, {
                     parent,
@@ -368,8 +131,7 @@ function setupTree() {
                         replacement.children[1] = tmp
                     }
                 }
-                parent.children[index] = replacement
-                // replaceObject(d, replacement)
+                parent.children![index] = replacement
             }
             update(d)
             e.stopPropagation()
@@ -382,56 +144,44 @@ function setupTree() {
         const svg = _svg
             .append("g")
             .on("click", clickTree)
-            .attr("transform", "translate(" + (margin.left + treeIndex * (width / NUM_TREES)) + "," + (height - margin.top) + ")");
+            .attr("transform", "translate(" + (margin.left + treeIndex * (width / NUM_TREES)) + "," + (height - margin.top) + ")")
 
-        let i = 0, duration = 2000, root;
+        let i = 0, duration = 2000
         
         // declares a tree layout and assigns the size
-        let treemap = d3.tree().size([width / NUM_TREES, height]);
+        let treemap = d3.tree().size([width / NUM_TREES, height])
         
         // Assigns parent, children, height, depth
-        root = d3.hierarchy(treeData, function(d) { return d.children; });
-        root.x0 = height / 2;
-        root.y0 = 0;
+        const root = d3.hierarchy<PointNode>(treeData as PointNode, d => (d as Tree).children as PointNode[])
+        root.data.x0 = height / 2
+        root.data.y0 = 0
         
-        // Collapse after the second level
-        // root.children.forEach(collapse);
-        
-        update(root);
+        update(root)
 
         const Node = d3.hierarchy.prototype.constructor
         
-        function update(source) {
-            console.log("update", source, convertTreeToProgram(root))
-            
+        function update(source: d3.HierarchyNode<PointNode>) {           
             // Assigns the x and y position for the nodes
-            var treeData = treemap(root);
-            
+            const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(source as any) as any
+
             // Compute the new tree layout.
-            var nodes = treeData.descendants(),
-            links = treeData.descendants().slice(1);
+            var nodes = treeLayout.descendants(),
+            links = treeLayout.descendants().slice(1)
             
             // Normalize for fixed-depth.
-            nodes.forEach(function(d){ d.y = d.depth * 50}); 
-            
-            // ****************** Nodes section ***************************
+            nodes.forEach(d => { d.y = d.depth * 50 }) 
             
             // Update the nodes...
-            var node = svg.selectAll('g.node')
-                .data(nodes, function(d) {return d.id || (d.id = ++i); });
+            const node = svg.selectAll('g.node')
+                .data(nodes, (d: any) => (d.id || (d.id = ++i)))
             
             // Enter any new nodes at the parent's previous position.
-            var nodeEnter = node.enter().append('g')
+            const nodeEnter = node.enter().append('g')
                 .attr('class', 'node')
-                .attr("transform", function(d) {
-                    // BEFORE ....
-                    //return "translate(" + source.y0 + "," + source.x0 + ")";
-                    // AFTER ....
-                    return "translate(" + source.x0 + "," + -source.y0 + ")";
-                })
-                .on('click', clickNode);
+                .attr("transform", "translate(" + source.data.x0 + "," + -source.data.y0 + ")")
+                .on('click', clickNode)
             
-            // var rectHeight = 60, rectWidth = 120;
+            // var rectHeight = 60, rectWidth = 120
             const rectHeight = 20, rectWidth = 20
             
             nodeEnter.append('rect')
@@ -441,106 +191,86 @@ function setupTree() {
                 .attr("x", 0)
                 .attr("y", (rectHeight/2)*-1)
                 .attr("rx","5")
-                .style("fill", function(d) {
-                    return d.data.fill;
-                })
-                .style("stroke", "black");
+                .style("fill", (d: d3.HierarchyPointNode<any>) => d.data.fill)
+                .style("stroke", "black")
             
             // Add labels for the nodes
             nodeEnter.append('text')
                 .attr("class", "node-text")
                 .attr("dy", ".35em")
-                .attr("x", function(d) {
-                    return rectWidth / 2;
-                })
-                .attr("text-anchor", function(d) {
-                    return "middle";
-                })
-                .text(function(d) { return d.data.name; })
+                .attr("x", rectWidth / 2)
+                .attr("text-anchor", "middle")
+                .text((d: d3.HierarchyPointNode<any>) => d.data.name)
             
             // UPDATE
-            var nodeUpdate = nodeEnter.merge(node);
+            const nodeUpdate = nodeEnter.merge(node as any)
             
             // Transition to the proper position for the node
             nodeUpdate.transition()
                 .duration(duration)
-                .attr("transform", function(d) { 
-                    // BEFORE ....
-                    //return "translate(" + d.y + "," + d.x + ")";
-                    // AFTER ....
-                    return "translate(" + d.x + "," + -d.y + ")";
-                });
+                .attr("transform", d => "translate(" + d.x + "," + -d.y + ")")
             
             // Update the node attributes and style
             nodeUpdate.select('circle.node')
                 .attr('r', 10)
-                .style("fill", function(d) {
-                    return d._children ? "lightsteelblue" : "#fff";
-                })
-                .attr('cursor', 'pointer');
+                .style("fill", d => d.children ? "lightsteelblue" : "#fff")
+                .attr('cursor', 'pointer')
             
             
             // Remove any exiting nodes
-            var nodeExit = node.exit().transition()
+            const nodeExit = node.exit().transition()
                 .duration(duration)
-                .attr("transform", function(d) {
-                    // BEFORE ....
-                    //return "translate(" + source.y + "," + source.x + ")";
-                    // AFTER ....
-                    return "translate(" + source.x + "," + -source.y + ")";
-                })
-                .remove();
+                .attr("transform", "translate(" + source.x + "," + -source.y! + ")")
+                .remove()
             
             // On exit reduce the node circles size to 0
             nodeExit.select('circle')
-                .attr('r', 1e-6);
+                .attr('r', 1e-6)
             
             // On exit reduce the opacity of text labels
             nodeExit.select('text')
-                .style('fill-opacity', 1e-6);
-            
-            // ****************** links section ***************************
+                .style('fill-opacity', 1e-6)
             
             // Update the links...
-            var link = svg.selectAll('path.link')
-                .data(links, d => d.id);
+            const link = svg.selectAll('path.link')
+                .data(links, (d: any) => d.id)
             
             // Enter any new links at the parent's previous position.
-            var linkEnter = link.enter().insert('path', "g")
+            const linkEnter = link.enter().insert('path', "g")
                 .attr("class", "link")
                 .on("click", clickLink)
                 .attr("stroke", "black")
                 .attr("stroke-width", 3)
-                .attr('d', function(d){
-                    var o = {x: source.x0, y: source.y0}
+                .attr('d', () => {
+                    const o = { x: source.data.x0, y: source.data.y0 }
                     return diagonal(o, o)
-                });
+                })
             
             // UPDATE
-            var linkUpdate = linkEnter.merge(link);
+            const linkUpdate = linkEnter.merge(link as any)
             
             // Transition back to the parent element position
             linkUpdate.transition()
                 .duration(duration)
-                .attr('d', function(d){ return diagonal(d, d.parent) });
+                .attr('d', function(d){ return diagonal(d, d.parent!) })
             
             // Remove any exiting links
-            var linkExit = link.exit().transition()
+            link.exit().transition()
                 .duration(duration)
-                .attr('d', function(d) {
-                    var o = {x: source.x, y: source.y}
+                .attr('d', () => {
+                    const o = { x: source.x!, y: source.y! }
                     return diagonal(o, o)
                 })
-                .remove();
+                .remove()
             
             // Store the old positions for transition.
-            nodes.forEach(function(d){
-                d.x0 = d.x;
-                d.y0 = d.y;
-            });
+            nodes.forEach((d: d3.HierarchyPointNode<any>) => {
+                d.data.x0 = d.x
+                d.data.y0 = d.y
+            })
 
             // Creates a curved (diagonal) path from parent to the child nodes
-            function diagonal(s, d) {
+            function diagonal(s: Point, d: Point) {
                 const path = `M ${s.x + (rectWidth / 2)} ${-s.y}
                     C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-s.y},
                     ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-d.y},
@@ -552,38 +282,30 @@ function setupTree() {
     }
 }
 
-function convertTreeToProgram(tree) {
-    return convertTreeToExpression(tree)
-//     return `
-// samples('github:felixroos/samples')
-// samples('https://strudel.cc/tidal-drum-machines.json', 'github:ritchse/tidal-drum-machines/main/machines/')
-
-// ${convertTreeToExpression(tree)}
-// `
-}
-
-function convertTreeToExpression(tree) {
-    console.log("???", tree, tree.data.name, tree.children?.length)
-    if (tree.data.name === " ") { // HACK: Special case for root...
-        return convertTreeToExpression(tree.children[0])
+function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
+    if (tree.data.name === " ") { // HACK: Special case for root
+        return convertTreeToExpression(tree.children![0])
     } else if (SAMPLE_ATOMS.includes(tree.data.name)) {
         return `s("${tree.data.name}")`
     } else if (NOTE_ATOMS.includes(tree.data.name)) {
         return `note("${tree.data.name}").s("piano")`
     } else {
-        const args = tree.children.map(convertTreeToExpression).join(",")
+        const args = tree.children!.map(convertTreeToExpression).join(",")
         return `${tree.data.name}(${args})`
     }
 }
 
+function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
+    sources[treeIndex] = convertTreeToExpression(tree)
+    const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
+    const program = `// greetings from atlanta (data dancers)\nstack(${panned.join(",")})`
+    repl.editor.setCode(program)
+    repl.editor.evaluate()
+}
+
 setupTree()
 
-// initStrudel({
-//     // prebake: () => samples('github:tidalcycles/dirt-samples'),
-//     prebake: () => registerSoundfonts(),
-// })
-
-const repl = document.createElement('strudel-editor');
-repl.setAttribute('code', `...`);
-document.getElementById('strudel').append(repl);
-console.log(repl.editor);
+const repl = document.createElement('strudel-editor') as any
+repl.setAttribute('code', `...`)
+document.getElementById('strudel')!.append(repl)
+console.log(repl.editor)
