@@ -5,6 +5,51 @@ const NOTE_ATOMS = ["c2", "eb2", "g2", "bb2", "c3", "eb3", "g3", "bb3", "c", "eb
 const UNARY_FUNCS = ["degrade", "brak", "rev"]
 const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 
+// Emoji mapping for tree nodes
+const EMOJI_MAP: Record<string, string> = {
+    // Sample atoms
+    "ocarina_small_stacc": "🎺",
+    "guiro": "🥁",
+    "psaltery_pluck": "🪕",
+    "sleighbells": "🔔",
+    "folkharp": "🎻",
+    "didgeridoo": "📯",
+    "insect": "🦗",
+    "insect:2": "🐝",
+    "wind": "💨",
+    "crow": "🦅",
+    "east": "🧭",
+    "~": "🔇",
+    // Note atoms
+    "c2": "🎵",
+    "eb2": "🎶",
+    "g2": "🎼",
+    "bb2": "🎹",
+    "c3": "🎸",
+    "eb3": "🎷",
+    "g3": "🎺",
+    "bb3": "🥁",
+    "c": "🎻",
+    "eb": "🪕",
+    "g": "🔔",
+    "bb": "📯",
+    // Unary functions
+    "degrade": "📉",
+    "brak": "⚡",
+    "rev": "⏪",
+    // Variadic functions
+    "stack": "📚",
+    "chooseCycles": "🔀",
+    "seq": "➡️",
+    "cat": "🔗",
+    // Special
+    " ": "🌳",
+}
+
+function getEmoji(name: string): string {
+    return EMOJI_MAP[name] || "❓"
+}
+
 const NUM_TREES = 8
 const sources = [...new Array(NUM_TREES)].map(() => "silence")
 
@@ -200,7 +245,7 @@ function setupTree() {
                 .attr("dy", ".35em")
                 .attr("x", rectWidth / 2)
                 .attr("text-anchor", "middle")
-                .text((d: d3.HierarchyPointNode<any>) => d.data.name)
+                .text((d: d3.HierarchyPointNode<any>) => getEmoji(d.data.name))
             
             // UPDATE
             const nodeUpdate = nodeEnter.merge(node as any)
