@@ -8,31 +8,34 @@ const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 // Emoji mapping for tree nodes
 const EMOJI_MAP: Record<string, string> = {
     // Sample atoms
-    "ocarina_small_stacc": "🎺",
-    "guiro": "🥁",
+    "ocarina_small_stacc": "🪈",
+    "guiro": "🪇",
     "psaltery_pluck": "🪕",
     "sleighbells": "🔔",
     "folkharp": "🎻",
-    "didgeridoo": "📯",
+    "didgeridoo": "🎷",
     "insect": "🦗",
     "insect:2": "🐝",
     "wind": "💨",
     "crow": "🦅",
     "east": "🧭",
     "~": "🔇",
-    // Note atoms
-    "c2": "🎵",
-    "eb2": "🎶",
-    "g2": "🎼",
-    "bb2": "🎹",
-    "c3": "🎸",
-    "eb3": "🎷",
-    "g3": "🎺",
-    "bb3": "🥁",
-    "c": "🎻",
-    "eb": "🪕",
-    "g": "🔔",
-    "bb": "📯",
+    // Note atoms - colored circles by pitch, shapes by octave
+    // Octave 2 (low) - squares
+    "c2": "🟥",
+    "eb2": "🟨",
+    "g2": "🟩",
+    "bb2": "🟦",
+    // Octave 3 (mid) - circles
+    "c3": "🔴",
+    "eb3": "🟡",
+    "g3": "🟢",
+    "bb3": "🔵",
+    // Default octave (high) - small circles
+    "c": "🔴",
+    "eb": "🟡",
+    "g": "🟢",
+    "bb": "🔵",
     // Unary functions
     "degrade": "📉",
     "brak": "⚡",
