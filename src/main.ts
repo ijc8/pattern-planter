@@ -20,18 +20,18 @@ const EMOJI_MAP: Record<string, string> = {
     "crow": "🦅",
     "east": "🧭",
     "~": "🔇",
-    // Note atoms - colored circles by pitch, shapes by octave
+    // Note atoms - colored shapes by pitch, shape by octave
     // Octave 2 (low) - squares
     "c2": "🟥",
     "eb2": "🟨",
     "g2": "🟩",
     "bb2": "🟦",
-    // Octave 3 (mid) - circles
-    "c3": "🔴",
-    "eb3": "🟡",
-    "g3": "🟢",
-    "bb3": "🔵",
-    // Default octave (high) - small circles
+    // Octave 3 (mid) - hearts
+    "c3": "❤️",
+    "eb3": "💛",
+    "g3": "💚",
+    "bb3": "💙",
+    // Default octave (high) - circles
     "c": "🔴",
     "eb": "🟡",
     "g": "🟢",
