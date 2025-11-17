@@ -116,15 +116,18 @@ function setupTree() {
             const parent = d.parent!
             const index = parent.children!.indexOf(d)
             console.log("index", index)
-            parent.children![index] = Object.assign(new Node, {
+            const newNode = Object.assign(new Node, {
                 parent,
                 depth: parent.depth + 1,
                 data: {
                     name: genAtom(),
                     fill: "white",
+                    x0: parent.x,
+                    y0: parent.y,
                 }
             })
-            update(d)
+            parent.children![index] = newNode
+            update(root)
             e.stopPropagation()
             playTree(root, treeIndex)
 
@@ -141,6 +144,8 @@ function setupTree() {
                     data: {
                         name: genAtom(),
                         fill: "white",
+                        x0: d.x,
+                        y0: d.y,
                     }
                 }))
             } else {
@@ -154,6 +159,8 @@ function setupTree() {
                     data: {
                         name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
                         fill: "white",
+                        x0: d.x,
+                        y0: d.y,
                     }
                 })
                 replacement.children = [Object.assign(new Node, {
@@ -162,6 +169,8 @@ function setupTree() {
                     data: {
                         name: d.data.name,
                         fill: "white",
+                        x0: d.x,
+                        y0: d.y,
                     }
                 })]
                 if (type === "variadic") {
@@ -171,6 +180,8 @@ function setupTree() {
                         data: {
                             name: genAtom(),
                             fill: "white",
+                            x0: d.x,
+                            y0: d.y,
                         }
                     }))
                     if (Math.random() < 0.5) {
@@ -181,7 +192,7 @@ function setupTree() {
                 }
                 parent.children![index] = replacement
             }
-            update(d)
+            update(root)
             e.stopPropagation()
             playTree(root, treeIndex)
         }
@@ -252,10 +263,14 @@ function setupTree() {
             
             // UPDATE
             const nodeUpdate = nodeEnter.merge(node as any)
-            
+
+            // Interrupt any ongoing transitions to prevent jank
+            nodeUpdate.interrupt()
+
             // Transition to the proper position for the node
             nodeUpdate.transition()
                 .duration(duration)
+                .ease(d3.easeCubicInOut)
                 .attr("transform", d => "translate(" + d.x + "," + -d.y + ")")
             
             // Update the node attributes and style
@@ -268,6 +283,7 @@ function setupTree() {
             // Remove any exiting nodes
             const nodeExit = node.exit().transition()
                 .duration(duration)
+                .ease(d3.easeCubicInOut)
                 .attr("transform", "translate(" + source.x + "," + -source.y! + ")")
                 .remove()
             
@@ -296,15 +312,20 @@ function setupTree() {
             
             // UPDATE
             const linkUpdate = linkEnter.merge(link as any)
-            
+
+            // Interrupt any ongoing transitions to prevent jank
+            linkUpdate.interrupt()
+
             // Transition back to the parent element position
             linkUpdate.transition()
                 .duration(duration)
+                .ease(d3.easeCubicInOut)
                 .attr('d', function(d){ return diagonal(d, d.parent!) })
             
             // Remove any exiting links
             link.exit().transition()
                 .duration(duration)
+                .ease(d3.easeCubicInOut)
                 .attr('d', () => {
                     const o = { x: source.x!, y: source.y! }
                     return diagonal(o, o)
