@@ -69,6 +69,8 @@ declare global {
 }
 
 window.highlightAtoms = (tags: string[]) => {
+    console.log("highlightAtoms called with tags:", tags)
+
     // Clear previous highlights
     activeAtoms.clear()
 
@@ -76,6 +78,8 @@ window.highlightAtoms = (tags: string[]) => {
     if (tags && Array.isArray(tags)) {
         tags.forEach(tag => activeAtoms.add(tag))
     }
+
+    console.log("activeAtoms after update:", Array.from(activeAtoms))
 
     // Update all trees to reflect new highlights
     treeRoots.forEach(root => {
@@ -87,6 +91,7 @@ window.highlightAtoms = (tags: string[]) => {
 
 function updateTreeColors(root: d3.HierarchyNode<PointNode>) {
     const nodes = root.descendants()
+    let highlightCount = 0
     nodes.forEach((node: d3.HierarchyNode<PointNode>) => {
         const isActive = activeAtoms.has(node.data.id || '')
         const isLeaf = !node.children || node.children.length === 0
@@ -94,10 +99,14 @@ function updateTreeColors(root: d3.HierarchyNode<PointNode>) {
         // Only highlight leaf nodes (atoms)
         if (isLeaf && isActive) {
             node.data.fill = "yellow"
+            highlightCount++
+            console.log("Highlighting node:", node.data.id, node.data.name)
         } else {
             node.data.fill = "white"
         }
     })
+
+    console.log(`Updated ${highlightCount} nodes to yellow in tree ${treeRoots.indexOf(root)}`)
 
     // Update the visual representation
     // Select all g.node elements in this tree and update their rect fill
@@ -421,6 +430,7 @@ stack(
     }
   })
 )`
+    console.log("Generated program:", program)
     repl.editor.setCode(program)
     repl.editor.evaluate()
 }
