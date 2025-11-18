@@ -237,7 +237,13 @@ function setupTree() {
             // Enter any new nodes at the parent's previous position.
             const nodeEnter = node.enter().append('g')
                 .attr('class', 'node')
-                .attr("transform", "translate(" + source.data.x0 + "," + -source.data.y0 + ")")
+                .attr("transform", (d: d3.HierarchyPointNode<PointNode>) => {
+                    const parent = d.parent;
+                    if (parent && parent.data.x0 !== undefined) {
+                        return "translate(" + parent.data.x0 + "," + -parent.data.y0 + ")";
+                    }
+                    return "translate(" + source.data.x0 + "," + -source.data.y0 + ")";
+                })
                 .on('click', clickNode)
             
             // var rectHeight = 60, rectWidth = 120
@@ -284,7 +290,13 @@ function setupTree() {
             const nodeExit = node.exit().transition()
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
-                .attr("transform", "translate(" + source.x + "," + -source.y! + ")")
+                .attr("transform", function(this: any, d: any) {
+                    const parent = d.parent;
+                    if (parent) {
+                        return "translate(" + parent.x + "," + -parent.y + ")";
+                    }
+                    return "translate(" + source.x + "," + -source.y! + ")";
+                })
                 .remove()
             
             // On exit reduce the node circles size to 0
@@ -305,8 +317,9 @@ function setupTree() {
                 .on("click", clickLink)
                 .attr("stroke", "black")
                 .attr("stroke-width", 3)
-                .attr('d', () => {
-                    const o = { x: source.data.x0, y: source.data.y0 }
+                .attr('d', (d: d3.HierarchyPointNode<PointNode>) => {
+                    const parent = d.parent!;
+                    const o = { x: parent.data.x0, y: parent.data.y0 }
                     return diagonal(o, o)
                 })
             
@@ -326,8 +339,9 @@ function setupTree() {
             link.exit().transition()
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
-                .attr('d', () => {
-                    const o = { x: source.x!, y: source.y! }
+                .attr('d', function(this: any, d: any) {
+                    const parent = d.parent!;
+                    const o = { x: parent.x, y: parent.y }
                     return diagonal(o, o)
                 })
                 .remove()
