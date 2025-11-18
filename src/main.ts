@@ -92,6 +92,11 @@ window.highlightAtoms = (tags: string[]) => {
 function updateTreeColors(root: d3.HierarchyNode<PointNode>) {
     const nodes = root.descendants()
     let highlightCount = 0
+
+    // Debug: log all leaf node IDs in this tree
+    const leafNodes = nodes.filter(n => !n.children || n.children.length === 0)
+    console.log(`Tree ${treeRoots.indexOf(root)} leaf node IDs:`, leafNodes.map(n => n.data.id))
+
     nodes.forEach((node: d3.HierarchyNode<PointNode>) => {
         const isActive = activeAtoms.has(node.data.id || '')
         const isLeaf = !node.children || node.children.length === 0
