@@ -60,6 +60,7 @@ const sources = [...new Array(NUM_TREES)].map(() => "silence")
 let nodeIdCounter = 0
 const activeAtoms = new Set<string>()
 const treeRoots: d3.HierarchyNode<PointNode>[] = []
+const atomTimeouts = new Map<string, number>()
 
 // Global function to highlight atoms, called from Strudel's onTrigger
 declare global {
@@ -71,15 +72,34 @@ declare global {
 window.highlightAtoms = (tags: any[]) => {
     console.log("highlightAtoms called with tags:", tags)
 
-    // Clear previous highlights
-    activeAtoms.clear()
-
     // Add new highlights - extract the actual tag string from objects
     if (tags && Array.isArray(tags)) {
         tags.forEach(tag => {
             // Tags from Strudel are objects with __pure property containing the actual tag
             const tagValue = typeof tag === 'object' && tag.__pure ? tag.__pure : tag
+
+            // Add to active atoms
             activeAtoms.add(tagValue)
+
+            // Clear any existing timeout for this tag
+            const existingTimeout = atomTimeouts.get(tagValue)
+            if (existingTimeout) {
+                clearTimeout(existingTimeout)
+            }
+
+            // Set a timeout to remove this tag after a short duration
+            const timeout = window.setTimeout(() => {
+                activeAtoms.delete(tagValue)
+                atomTimeouts.delete(tagValue)
+                // Update trees after removing highlight
+                treeRoots.forEach(root => {
+                    if (root) {
+                        updateTreeColors(root)
+                    }
+                })
+            }, 150) // Keep highlighted for 150ms after last trigger
+
+            atomTimeouts.set(tagValue, timeout)
         })
     }
 
