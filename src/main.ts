@@ -390,22 +390,25 @@ function spawnDroplets() {
 // Function to check collision between droplet and node
 function checkCollision(droplet: WaterDroplet, nodeElement: any): boolean {
     try {
-        const nodeTransform = nodeElement.getAttribute("transform")
+        // Get the rect element inside the node group
+        const rectElement = nodeElement.querySelector("rect")
+        if (!rectElement) return false
 
-        // Parse transform to get position
-        const match = nodeTransform?.match(/translate\(([^,]+),([^)]+)\)/)
-        if (!match) return false
+        // Get the actual screen position of the rect
+        const rectBBox = rectElement.getBoundingClientRect()
+        const svgBBox = (mainSvg.node() as SVGSVGElement).getBoundingClientRect()
 
-        const nodeX = parseFloat(match[1])
-        const nodeY = parseFloat(match[2])
+        // Convert rect position to SVG coordinates
+        const nodeX = rectBBox.left - svgBBox.left
+        const nodeY = rectBBox.top - svgBBox.top
+        const nodeWidth = rectBBox.width
+        const nodeHeight = rectBBox.height
 
-        // Check if droplet is within node bounds (rect is 20x20, centered at y=0)
-        const rectWidth = 20
-        const rectHeight = 20
+        // Check if droplet is within node bounds
         return droplet.x >= nodeX &&
-               droplet.x <= nodeX + rectWidth &&
-               droplet.y >= nodeY - rectHeight/2 &&
-               droplet.y <= nodeY + rectHeight/2
+               droplet.x <= nodeX + nodeWidth &&
+               droplet.y >= nodeY &&
+               droplet.y <= nodeY + nodeHeight
     } catch (e) {
         return false
     }
