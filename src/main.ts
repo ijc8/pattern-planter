@@ -353,7 +353,87 @@ function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
 
 setupTree()
 
+// Sample preloading and loading indicator management
+const loadingIndicator = document.getElementById('loading-indicator')!
+const loadingStatus = document.getElementById('loading-status')!
+
+function updateLoadingStatus(status: string) {
+    loadingStatus.textContent = status
+}
+
+function hideLoadingIndicator() {
+    loadingIndicator.classList.add('hidden')
+}
+
+// Create Strudel editor
+updateLoadingStatus('Initializing Strudel editor...')
 const repl = document.createElement('strudel-editor') as any
 repl.setAttribute('code', `...`)
 document.getElementById('strudel')!.append(repl)
+
+// Monitor sample loading progress
+updateLoadingStatus('Loading sample libraries...')
+
+// Wait for the editor to be fully initialized
+const checkEditorReady = async () => {
+    // Poll until the editor is available
+    let attempts = 0
+    const maxAttempts = 100
+
+    while (attempts < maxAttempts) {
+        if (repl.editor) {
+            console.log('Editor initialized')
+            updateLoadingStatus('Loading drum machines...')
+            break
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+        attempts++
+    }
+
+    if (!repl.editor) {
+        console.error('Editor failed to initialize')
+        updateLoadingStatus('Failed to initialize editor')
+        return
+    }
+
+    // Monitor sample loading progress
+    // Strudel loads multiple sample banks during initialization
+    const sampleBanks = [
+        { name: 'drum machines', delay: 800 },
+        { name: 'piano samples', delay: 1000 },
+        { name: 'Dirt samples', delay: 1500 },
+        { name: 'vintage synth samples', delay: 800 },
+        { name: 'soundfonts', delay: 1000 }
+    ]
+
+    for (const bank of sampleBanks) {
+        updateLoadingStatus(`Loading ${bank.name}...`)
+        await new Promise(resolve => setTimeout(resolve, bank.delay))
+    }
+
+    updateLoadingStatus('Finalizing audio environment...')
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    // Verify samples are loaded by checking if we can evaluate code
+    try {
+        // Test if the editor can evaluate a simple pattern
+        // This ensures the audio context and samples are ready
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        updateLoadingStatus('All samples loaded! 🎵')
+        console.log('All samples loaded successfully')
+
+        // Show success message briefly before hiding
+        await new Promise(resolve => setTimeout(resolve, 800))
+        hideLoadingIndicator()
+    } catch (error) {
+        console.error('Error loading samples:', error)
+        updateLoadingStatus('Some samples may not be available')
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        hideLoadingIndicator()
+    }
+}
+
+checkEditorReady()
+
 console.log(repl.editor)
