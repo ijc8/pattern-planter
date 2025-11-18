@@ -8,6 +8,12 @@ const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 const NUM_TREES = 8
 const sources = [...new Array(NUM_TREES)].map(() => "silence")
 
+// Watering constants
+const WATER_THRESHOLD = 100  // Amount of water needed to grow a node
+const DROPLET_SPAWN_RATE = 3  // Droplets per frame when holding mouse
+const DROPLET_GRAVITY = 0.5  // Downward acceleration
+const DROPLET_SIZE = 3  // Radius of water droplets
+
 function choice(array: any[]) {
     return array[Math.floor(Math.random() * array.length)]
 }
@@ -21,9 +27,18 @@ interface Point {
     y: number
 }
 
+interface WaterDroplet {
+    x: number
+    y: number
+    vx: number  // Velocity x
+    vy: number  // Velocity y
+    id: number
+}
+
 interface Node {
     name: string
     fill: string
+    water?: number  // Accumulated water level (0 to WATER_THRESHOLD)
 }
 
 interface Tree extends Node {
@@ -39,9 +54,11 @@ function setupTree() {
     const treeData: Tree = {
         name: " ",
         fill: "white",
+        water: 0,
         children: [{
             name: "~",
-            fill: "white"
+            fill: "white",
+            water: 0
         }],
     }
 
@@ -74,6 +91,7 @@ function setupTree() {
                 data: {
                     name: genAtom(),
                     fill: "white",
+                    water: 0,
                 }
             })
             update(d)
@@ -82,10 +100,11 @@ function setupTree() {
 
         }
 
-        function clickNode(e: Event, d: d3.HierarchyPointNode<PointNode>) {
-            console.log("clickNode", e, d)
+        // Growth logic triggered by watering
+        function growNode(d: d3.HierarchyPointNode<PointNode>) {
             if (UNARY_FUNCS.includes(d.data.name)) {
                 console.log("can't grow this")
+                return
             } else if (VARIADIC_FUNCS.includes(d.data.name)) {
                 d.children!.push(Object.assign(new Node, {
                     parent: d,
@@ -93,6 +112,7 @@ function setupTree() {
                     data: {
                         name: genAtom(),
                         fill: "white",
+                        water: 0,
                     }
                 }))
             } else {
@@ -106,6 +126,7 @@ function setupTree() {
                     data: {
                         name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
                         fill: "white",
+                        water: 0,
                     }
                 })
                 replacement.children = [Object.assign(new Node, {
@@ -114,6 +135,7 @@ function setupTree() {
                     data: {
                         name: d.data.name,
                         fill: "white",
+                        water: 0,
                     }
                 })]
                 if (type === "variadic") {
@@ -123,6 +145,7 @@ function setupTree() {
                         data: {
                             name: genAtom(),
                             fill: "white",
+                            water: 0,
                         }
                     }))
                     if (Math.random() < 0.5) {
@@ -133,8 +156,9 @@ function setupTree() {
                 }
                 parent.children![index] = replacement
             }
+            // Reset water level after growing
+            d.data.water = 0
             update(d)
-            e.stopPropagation()
             playTree(root, treeIndex)
         }
         
@@ -155,11 +179,9 @@ function setupTree() {
         const root = d3.hierarchy<PointNode>(treeData as PointNode, d => (d as Tree).children as PointNode[])
         root.data.x0 = height / 2
         root.data.y0 = 0
-        
-        update(root)
 
         const Node = d3.hierarchy.prototype.constructor
-        
+
         function update(source: d3.HierarchyNode<PointNode>) {           
             // Assigns the x and y position for the nodes
             const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(source as any) as any
@@ -179,7 +201,6 @@ function setupTree() {
             const nodeEnter = node.enter().append('g')
                 .attr('class', 'node')
                 .attr("transform", "translate(" + source.data.x0 + "," + -source.data.y0 + ")")
-                .on('click', clickNode)
             
             // var rectHeight = 60, rectWidth = 120
             const rectHeight = 20, rectWidth = 20
@@ -275,10 +296,21 @@ function setupTree() {
                     C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-s.y},
                     ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-d.y},
                     ${d.x + (rectWidth / 2)} ${-d.y}`
-                
+
                 return path
             }
         }
+
+        // Initialize tree and store references for watering system
+        update(root)
+        allTrees.push({
+            root,
+            treeIndex,
+            svg,
+            growNode,
+            update,
+            playTree: (r, idx) => playTree(r, idx)
+        })
     }
 }
 
@@ -303,7 +335,179 @@ function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     repl.editor.evaluate()
 }
 
+// Store all tree data for watering system
+const allTrees: Array<{root: d3.HierarchyNode<PointNode>, treeIndex: number, svg: any, growNode: (d: any) => void, update: (d: any) => void, playTree: (root: any, index: number) => void}> = []
+
 setupTree()
+
+// Watering system
+let droplets: WaterDroplet[] = []
+let nextDropletId = 0
+let isWatering = false
+let mouseX = 0
+let mouseY = 0
+
+// Get the main SVG element
+const mainSvg = d3.select("#planter svg")
+
+// Create a group for water droplets
+const dropletsGroup = mainSvg.append("g").attr("class", "droplets")
+
+// Mouse event handlers
+mainSvg.on("mousedown", (event: MouseEvent) => {
+    if (event.button === 0) {  // Left mouse button
+        isWatering = true
+    }
+})
+
+mainSvg.on("mousemove", (event: MouseEvent) => {
+    const rect = (mainSvg.node() as SVGSVGElement).getBoundingClientRect()
+    mouseX = event.clientX - rect.left
+    mouseY = event.clientY - rect.top
+})
+
+d3.select(document).on("mouseup", (event: MouseEvent) => {
+    if (event.button === 0) {
+        isWatering = false
+    }
+})
+
+// Function to spawn water droplets
+function spawnDroplets() {
+    if (!isWatering) return
+
+    for (let i = 0; i < DROPLET_SPAWN_RATE; i++) {
+        droplets.push({
+            x: mouseX + (Math.random() - 0.5) * 10,
+            y: mouseY,
+            vx: (Math.random() - 0.5) * 2,
+            vy: Math.random() * 2,
+            id: nextDropletId++
+        })
+    }
+}
+
+// Function to check collision between droplet and node
+function checkCollision(droplet: WaterDroplet, nodeElement: any): boolean {
+    try {
+        const nodeTransform = nodeElement.getAttribute("transform")
+
+        // Parse transform to get position
+        const match = nodeTransform?.match(/translate\(([^,]+),([^)]+)\)/)
+        if (!match) return false
+
+        const nodeX = parseFloat(match[1])
+        const nodeY = parseFloat(match[2])
+
+        // Check if droplet is within node bounds (rect is 20x20, centered at y=0)
+        const rectWidth = 20
+        const rectHeight = 20
+        return droplet.x >= nodeX &&
+               droplet.x <= nodeX + rectWidth &&
+               droplet.y >= nodeY - rectHeight/2 &&
+               droplet.y <= nodeY + rectHeight/2
+    } catch (e) {
+        return false
+    }
+}
+
+// Function to get water level color
+function getWaterColor(water: number): string {
+    const ratio = water / WATER_THRESHOLD
+    if (ratio < 0.33) {
+        return `rgb(${255}, ${255}, ${255})` // White
+    } else if (ratio < 0.66) {
+        return `rgb(${200}, ${230}, ${255})` // Light blue
+    } else {
+        return `rgb(${100}, ${200}, ${255})` // Blue
+    }
+}
+
+// Animation loop
+function animate() {
+    // Spawn new droplets
+    spawnDroplets()
+
+    // Update droplet positions
+    droplets.forEach(droplet => {
+        droplet.vy += DROPLET_GRAVITY
+        droplet.x += droplet.vx
+        droplet.y += droplet.vy
+    })
+
+    // Check collisions with all nodes
+    const allNodeElements = mainSvg.selectAll("g.node").nodes()
+    const toRemove: number[] = []
+
+    droplets.forEach((droplet, idx) => {
+        for (let i = 0; i < allNodeElements.length; i++) {
+            const nodeElement = allNodeElements[i]
+            if (checkCollision(droplet, nodeElement)) {
+                // Get the node data
+                const nodeData = d3.select(nodeElement).datum() as d3.HierarchyPointNode<PointNode>
+
+                // Add water
+                if (nodeData.data.water === undefined) {
+                    nodeData.data.water = 0
+                }
+                nodeData.data.water += 1
+
+                // Update visual feedback
+                d3.select(nodeElement).select("rect")
+                    .style("fill", getWaterColor(nodeData.data.water))
+
+                // Check if ready to grow
+                if (nodeData.data.water >= WATER_THRESHOLD) {
+                    // Find which tree this node belongs to and trigger growth
+                    // We need to find the tree by checking the node's root
+                    let currentNode: any = nodeData
+                    while (currentNode.parent) {
+                        currentNode = currentNode.parent
+                    }
+
+                    // Find matching tree in allTrees
+                    for (const treeData of allTrees) {
+                        if (treeData.root === currentNode) {
+                            treeData.growNode(nodeData)
+                            break
+                        }
+                    }
+                }
+
+                toRemove.push(idx)
+                break
+            }
+        }
+    })
+
+    // Remove droplets that are off screen or hit something
+    droplets = droplets.filter((_, idx) => {
+        if (toRemove.includes(idx)) return false
+        return droplets[idx].y < 1000 && droplets[idx].y > -100
+    })
+
+    // Render droplets
+    const dropletSelection = dropletsGroup.selectAll("circle.droplet")
+        .data(droplets, (d: any) => d.id)
+
+    dropletSelection.enter()
+        .append("circle")
+        .attr("class", "droplet")
+        .attr("r", DROPLET_SIZE)
+        .attr("fill", "#4444ff")
+        .attr("opacity", 0.6)
+
+    dropletsGroup.selectAll("circle.droplet")
+        .attr("cx", (d: any) => d.x)
+        .attr("cy", (d: any) => d.y)
+
+    dropletSelection.exit().remove()
+
+    requestAnimationFrame(animate)
+}
+
+// Start animation loop
+animate()
 
 const repl = document.createElement('strudel-editor') as any
 repl.setAttribute('code', `...`)
