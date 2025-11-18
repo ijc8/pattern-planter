@@ -218,9 +218,13 @@ function setupTree() {
             // Compute the new tree layout.
             var nodes = treeLayout.descendants(),
             links = treeLayout.descendants().slice(1)
-            
+
             // Normalize for fixed-depth.
-            nodes.forEach(d => { d.y = d.depth * 50 }) 
+            nodes.forEach(d => { d.y = d.depth * 50 })
+
+            // Find the node in the new layout that corresponds to source (for animations)
+            // This is needed because treemap creates new node objects
+            const sourceNode = nodes.find(node => node.data === source.data) || source 
             
             // Update the nodes...
             const node = svg.selectAll('g.node')
@@ -234,7 +238,7 @@ function setupTree() {
                     if (parent && parent.data.x0 !== undefined) {
                         return "translate(" + parent.data.x0 + "," + -parent.data.y0 + ")";
                     }
-                    return "translate(" + source.data.x0 + "," + -source.data.y0 + ")";
+                    return "translate(" + sourceNode.data.x0 + "," + -sourceNode.data.y0 + ")";
                 })
                 .on('click', clickNode)
             
@@ -287,7 +291,7 @@ function setupTree() {
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
                 .attr("transform", function(this: any) {
-                    return "translate(" + source.x + "," + -source.y! + ")";
+                    return "translate(" + sourceNode.x + "," + -sourceNode.y! + ")";
                 })
                 .remove()
             
@@ -332,7 +336,7 @@ function setupTree() {
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
                 .attr('d', function(this: any) {
-                    const o = { x: source.x!, y: source.y! }
+                    const o = { x: sourceNode.x!, y: sourceNode.y! }
                     return diagonal(o, o)
                 })
                 .remove()
