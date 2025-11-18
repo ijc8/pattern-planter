@@ -149,34 +149,26 @@ function setupTree() {
                     }
                 }))
             } else {
-                // Atom; replace
-                const parent = d.parent!
-                const index = parent.children!.indexOf(d)
+                // Atom; transform in place
                 const type = Math.random() < 0.25 ? "unary" : "variadic"
-                const replacement = Object.assign(new Node, {
-                    parent,
-                    depth: d.depth,
+                const oldName = d.data.name
+                // Update the node's name in place
+                d.data.name = type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS)
+                // Create children for this node
+                d.children = [Object.assign(new Node, {
+                    parent: d,
+                    depth: d.depth + 1,
                     data: {
-                        name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
-                        fill: "white",
-                        x0: d.x,
-                        y0: d.y,
-                    }
-                })
-                replacement.children = [Object.assign(new Node, {
-                    parent: replacement,
-                    depth: replacement.depth + 1,
-                    data: {
-                        name: d.data.name,
+                        name: oldName,
                         fill: "white",
                         x0: d.x,
                         y0: d.y,
                     }
                 })]
                 if (type === "variadic") {
-                    replacement.children.push(Object.assign(new Node, {
-                        parent: replacement,
-                        depth: replacement.depth + 1,
+                    d.children.push(Object.assign(new Node, {
+                        parent: d,
+                        depth: d.depth + 1,
                         data: {
                             name: genAtom(),
                             fill: "white",
@@ -185,12 +177,11 @@ function setupTree() {
                         }
                     }))
                     if (Math.random() < 0.5) {
-                        const tmp = replacement.children[0]
-                        replacement.children[0] = replacement.children[1]
-                        replacement.children[1] = tmp
+                        const tmp = d.children[0]
+                        d.children[0] = d.children[1]
+                        d.children[1] = tmp
                     }
                 }
-                parent.children![index] = replacement
             }
             update(root)
             e.stopPropagation()
@@ -278,7 +269,11 @@ function setupTree() {
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
                 .attr("transform", d => "translate(" + d.x + "," + -d.y + ")")
-            
+
+            // Update the text content (for when nodes transform)
+            nodeUpdate.select('text')
+                .text((d: d3.HierarchyPointNode<any>) => d.data.name)
+
             // Update the node attributes and style
             nodeUpdate.select('circle.node')
                 .attr('r', 10)
