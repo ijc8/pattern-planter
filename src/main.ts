@@ -162,7 +162,7 @@ function setupTree() {
         
         function update(source: d3.HierarchyNode<PointNode>) {           
             // Assigns the x and y position for the nodes
-            const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(source as any) as any
+            const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(root as any) as any
 
             // Compute the new tree layout.
             var nodes = treeLayout.descendants(),
