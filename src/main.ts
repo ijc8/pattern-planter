@@ -68,15 +68,19 @@ declare global {
     }
 }
 
-window.highlightAtoms = (tags: string[]) => {
+window.highlightAtoms = (tags: any[]) => {
     console.log("highlightAtoms called with tags:", tags)
 
     // Clear previous highlights
     activeAtoms.clear()
 
-    // Add new highlights
+    // Add new highlights - extract the actual tag string from objects
     if (tags && Array.isArray(tags)) {
-        tags.forEach(tag => activeAtoms.add(tag))
+        tags.forEach(tag => {
+            // Tags from Strudel are objects with __pure property containing the actual tag
+            const tagValue = typeof tag === 'object' && tag.__pure ? tag.__pure : tag
+            activeAtoms.add(tagValue)
+        })
     }
 
     console.log("activeAtoms after update:", Array.from(activeAtoms))
