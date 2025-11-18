@@ -127,7 +127,7 @@ function setupTree() {
                 }
             })
             parent.children![index] = newNode
-            update(root)
+            update(parent)  // Use parent as source so removed subtree collapses to it
             e.stopPropagation()
             playTree(root, treeIndex)
 
@@ -183,7 +183,7 @@ function setupTree() {
                     }
                 }
             }
-            update(root)
+            update(d)  // Use clicked node as source so new children enter from it
             e.stopPropagation()
             playTree(root, treeIndex)
         }
@@ -210,8 +210,9 @@ function setupTree() {
 
         const Node = d3.hierarchy.prototype.constructor
         
-        function update(source: d3.HierarchyNode<PointNode>) {           
+        function update(source: d3.HierarchyNode<PointNode>) {
             // Assigns the x and y position for the nodes
+            // Always calculate layout with root for correctness
             const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(root as any) as any
 
             // Compute the new tree layout.
@@ -272,7 +273,7 @@ function setupTree() {
 
             // Update the text content (for when nodes transform)
             nodeUpdate.select('text')
-                .text((d: d3.HierarchyPointNode<any>) => d.data.name)
+                .text((d: d3.HierarchyPointNode<any>) => getEmoji(d.data.name))
 
             // Update the node attributes and style
             nodeUpdate.select('circle.node')
@@ -281,15 +282,11 @@ function setupTree() {
                 .attr('cursor', 'pointer')
             
             
-            // Remove any exiting nodes
+            // Remove any exiting nodes - all collapse to source as a unit
             const nodeExit = node.exit().transition()
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
-                .attr("transform", function(this: any, d: any) {
-                    const parent = d.parent;
-                    if (parent) {
-                        return "translate(" + parent.x + "," + -parent.y + ")";
-                    }
+                .attr("transform", function(this: any) {
                     return "translate(" + source.x + "," + -source.y! + ")";
                 })
                 .remove()
@@ -330,13 +327,12 @@ function setupTree() {
                 .ease(d3.easeCubicInOut)
                 .attr('d', function(d){ return diagonal(d, d.parent!) })
             
-            // Remove any exiting links
+            // Remove any exiting links - all collapse to source as a unit
             link.exit().transition()
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
-                .attr('d', function(this: any, d: any) {
-                    const parent = d.parent!;
-                    const o = { x: parent.x, y: parent.y }
+                .attr('d', function(this: any) {
+                    const o = { x: source.x!, y: source.y! }
                     return diagonal(o, o)
                 })
                 .remove()
