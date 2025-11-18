@@ -411,12 +411,16 @@ function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
 function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     sources[treeIndex] = convertTreeToExpression(tree)
     const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
-    const program = `// greetings from atlanta (data dancers)\nstack(${panned.join(",")}).fmap((value, hap) => {
-  if (hap.context?.tags) {
-    window.highlightAtoms(hap.context.tags);
-  }
-  return value;
-})`
+    const mainPattern = `stack(${panned.join(",")})`
+    const program = `// greetings from atlanta (data dancers)
+stack(
+  ${mainPattern},
+  ${mainPattern}.gain(0).onTrigger((t, hap) => {
+    if (hap.context?.tags) {
+      window.highlightAtoms(hap.context.tags);
+    }
+  })
+)`
     repl.editor.setCode(program)
     repl.editor.evaluate()
 }
