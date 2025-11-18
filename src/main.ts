@@ -46,7 +46,7 @@ const EMOJI_MAP: Record<string, string> = {
     "seq": "⏩",
     "cat": "🐱",
     // Special
-    " ": "🌳",
+    " ": "🫚",
 }
 
 function getEmoji(name: string): string {
