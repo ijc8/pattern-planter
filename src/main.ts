@@ -8,18 +8,18 @@ const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
 // Emoji mapping for tree nodes
 const EMOJI_MAP: Record<string, string> = {
     // Sample atoms
-    "ocarina_small_stacc": "🪈",
+    "ocarina_small_stacc": "🐚",
     "guiro": "🪇",
     "psaltery_pluck": "🪕",
     "sleighbells": "🔔",
-    "folkharp": "🎻",
-    "didgeridoo": "🎷",
+    "folkharp": "🪉",
+    "didgeridoo": "🪈",
     "insect": "🦗",
     "insect:2": "🐝",
     "wind": "💨",
-    "crow": "🦅",
+    "crow": "🐦‍⬛",
     "east": "🧭",
-    "~": "🔇",
+    "~": " ",
     // Note atoms - colored shapes by pitch, shape by octave
     // Octave 2 (low) - squares
     "c2": "🟥",
