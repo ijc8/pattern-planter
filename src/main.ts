@@ -37,8 +37,8 @@ const EMOJI_MAP: Record<string, string> = {
     "g": "🟢",
     "bb": "🔵",
     // Unary functions
-    "degrade": "🎲",
-    "brak": "🥁",
+    "degrade": "🪙",
+    "brak": "🧱",
     "rev": "⏪",
     // Variadic functions
     "stack": "📚",
