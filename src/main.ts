@@ -135,6 +135,10 @@ function setupTree() {
 
         function clickNode(e: Event, d: d3.HierarchyPointNode<PointNode>) {
             console.log("clickNode", e, d)
+            // Prevent watering the root node
+            if (d.data.name === " ") {
+                return
+            }
             if (UNARY_FUNCS.includes(d.data.name)) {
                 console.log("can't grow this")
             } else if (VARIADIC_FUNCS.includes(d.data.name)) {
