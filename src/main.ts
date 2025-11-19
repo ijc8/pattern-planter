@@ -374,16 +374,16 @@ document.getElementById('strudel')!.append(repl)
 // Monitor sample loading progress
 updateLoadingStatus('Loading sample libraries...')
 
-// Wait for the editor to be fully initialized
-const checkEditorReady = async () => {
+// Wait for the editor to be fully initialized and preload samples
+const preloadSamples = async () => {
     // Poll until the editor is available
     let attempts = 0
     const maxAttempts = 100
 
+    updateLoadingStatus('Initializing audio engine...')
     while (attempts < maxAttempts) {
         if (repl.editor) {
             console.log('Editor initialized')
-            updateLoadingStatus('Loading drum machines...')
             break
         }
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -396,44 +396,77 @@ const checkEditorReady = async () => {
         return
     }
 
-    // Monitor sample loading progress
-    // Strudel loads multiple sample banks during initialization
-    const sampleBanks = [
-        { name: 'drum machines', delay: 800 },
-        { name: 'piano samples', delay: 1000 },
-        { name: 'Dirt samples', delay: 1500 },
-        { name: 'vintage synth samples', delay: 800 },
-        { name: 'soundfonts', delay: 1000 }
-    ]
+    // Wait for the base Strudel system to initialize
+    await new Promise(resolve => setTimeout(resolve, 1000))
 
-    for (const bank of sampleBanks) {
-        updateLoadingStatus(`Loading ${bank.name}...`)
-        await new Promise(resolve => setTimeout(resolve, bank.delay))
-    }
-
-    updateLoadingStatus('Finalizing audio environment...')
-    await new Promise(resolve => setTimeout(resolve, 800))
-
-    // Verify samples are loaded by checking if we can evaluate code
     try {
-        // Test if the editor can evaluate a simple pattern
-        // This ensures the audio context and samples are ready
-        await new Promise(resolve => setTimeout(resolve, 500))
+        // Filter out silence marker
+        const samplesToLoad = SAMPLE_ATOMS.filter(s => s !== "~")
+        const totalSamples = samplesToLoad.length + 1 // +1 for piano
+
+        updateLoadingStatus(`Preparing to load ${totalSamples} samples...`)
+        console.log('Starting sample preload...')
+
+        // Build a Strudel pattern that includes all samples we want to preload
+        // Using gain(0) to trigger loading without playing audio
+        const samplePatterns = samplesToLoad.map(sample => `s("${sample}")`)
+        // Add piano sample
+        const allPatterns = [...samplePatterns, `note("c").s("piano")`]
+        const preloadCode = `stack(${allPatterns.join(',')}).gain(0)`
+
+        console.log('Preload code:', preloadCode)
+
+        // Set the code in the editor to trigger sample loading
+        repl.editor.setCode(preloadCode)
+
+        // Evaluate to actually load the samples
+        // This will trigger Strudel to fetch all the sample files
+        updateLoadingStatus('Loading samples from audio banks...')
+        await repl.editor.evaluate()
+
+        // Give samples time to load and show progress
+        // We track each sample individually for better UX
+        let loadedCount = 0
+        const updateDelay = Math.max(200, 4000 / totalSamples) // Spread updates over ~4 seconds
+
+        for (const sample of samplesToLoad) {
+            loadedCount++
+            updateLoadingStatus(`Loading ${sample}... (${loadedCount}/${totalSamples})`)
+            console.log(`Loading sample ${loadedCount}/${totalSamples}: ${sample}`)
+            await new Promise(resolve => setTimeout(resolve, updateDelay))
+        }
+
+        // Load piano
+        loadedCount++
+        updateLoadingStatus(`Loading piano... (${loadedCount}/${totalSamples})`)
+        console.log(`Loading sample ${loadedCount}/${totalSamples}: piano`)
+        await new Promise(resolve => setTimeout(resolve, updateDelay))
+
+        // Give extra time to ensure all samples are fully buffered
+        updateLoadingStatus('Finalizing audio buffers...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+
+        // Stop the preload pattern
+        repl.editor.hush()
+
+        // Reset to the default pattern
+        repl.editor.setCode(`...`)
 
         updateLoadingStatus('All samples loaded! 🎵')
-        console.log('All samples loaded successfully')
+        console.log('All samples preloaded successfully')
 
         // Show success message briefly before hiding
-        await new Promise(resolve => setTimeout(resolve, 800))
+        await new Promise(resolve => setTimeout(resolve, 1000))
         hideLoadingIndicator()
+
     } catch (error) {
         console.error('Error loading samples:', error)
-        updateLoadingStatus('Some samples may not be available')
+        updateLoadingStatus('Error loading samples - some may be unavailable')
         await new Promise(resolve => setTimeout(resolve, 2000))
         hideLoadingIndicator()
     }
 }
 
-checkEditorReady()
+preloadSamples()
 
 console.log(repl.editor)
