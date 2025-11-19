@@ -451,14 +451,21 @@ function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
     const mainPattern = `stack(${panned.join(",")})`
     const program = `// greetings from atlanta (data dancers)
-stack(
-  ${mainPattern},
-  ${mainPattern}.gain(0).onTrigger((t, hap) => {
-    if (hap.context?.tags) {
-      window.highlightAtoms(hap.context.tags);
-    }
-  })
-)`
+// Define custom observe method that doesn't interfere with audio output
+if (!Pattern.prototype.observe) {
+  Pattern.prototype.observe = function(callback) {
+    return this._withHap((hap) => {
+      callback(hap);
+      return hap;
+    });
+  };
+}
+
+${mainPattern}.observe((hap) => {
+  if (hap.context?.tags) {
+    window.highlightAtoms(hap.context.tags);
+  }
+})`
     console.log("Generated program:", program)
     repl.editor.setCode(program)
     repl.editor.evaluate()
