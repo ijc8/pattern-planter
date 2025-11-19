@@ -116,15 +116,18 @@ function setupTree() {
             const parent = d.parent!
             const index = parent.children!.indexOf(d)
             console.log("index", index)
-            parent.children![index] = Object.assign(new Node, {
+            const newNode = Object.assign(new Node, {
                 parent,
                 depth: parent.depth + 1,
                 data: {
                     name: genAtom(),
                     fill: "white",
+                    x0: parent.x,
+                    y0: parent.y,
                 }
             })
-            update(d)
+            parent.children![index] = newNode
+            update(parent)  // Use parent as source so removed subtree collapses to it
             e.stopPropagation()
             playTree(root, treeIndex)
 
@@ -132,6 +135,10 @@ function setupTree() {
 
         function clickNode(e: Event, d: d3.HierarchyPointNode<PointNode>) {
             console.log("clickNode", e, d)
+            // Prevent watering the root node
+            if (d.data.name === " ") {
+                return
+            }
             if (UNARY_FUNCS.includes(d.data.name)) {
                 console.log("can't grow this")
             } else if (VARIADIC_FUNCS.includes(d.data.name)) {
@@ -141,47 +148,46 @@ function setupTree() {
                     data: {
                         name: genAtom(),
                         fill: "white",
+                        x0: d.x,
+                        y0: d.y,
                     }
                 }))
             } else {
-                // Atom; replace
-                const parent = d.parent!
-                const index = parent.children!.indexOf(d)
+                // Atom; transform in place
                 const type = Math.random() < 0.25 ? "unary" : "variadic"
-                const replacement = Object.assign(new Node, {
-                    parent,
-                    depth: d.depth,
+                const oldName = d.data.name
+                // Update the node's name in place
+                d.data.name = type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS)
+                // Create children for this node
+                d.children = [Object.assign(new Node, {
+                    parent: d,
+                    depth: d.depth + 1,
                     data: {
-                        name: type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS),
+                        name: oldName,
                         fill: "white",
-                    }
-                })
-                replacement.children = [Object.assign(new Node, {
-                    parent: replacement,
-                    depth: replacement.depth + 1,
-                    data: {
-                        name: d.data.name,
-                        fill: "white",
+                        x0: d.x,
+                        y0: d.y,
                     }
                 })]
                 if (type === "variadic") {
-                    replacement.children.push(Object.assign(new Node, {
-                        parent: replacement,
-                        depth: replacement.depth + 1,
+                    d.children.push(Object.assign(new Node, {
+                        parent: d,
+                        depth: d.depth + 1,
                         data: {
                             name: genAtom(),
                             fill: "white",
+                            x0: d.x,
+                            y0: d.y,
                         }
                     }))
                     if (Math.random() < 0.5) {
-                        const tmp = replacement.children[0]
-                        replacement.children[0] = replacement.children[1]
-                        replacement.children[1] = tmp
+                        const tmp = d.children[0]
+                        d.children[0] = d.children[1]
+                        d.children[1] = tmp
                     }
                 }
-                parent.children![index] = replacement
             }
-            update(d)
+            update(d)  // Use clicked node as source so new children enter from it
             e.stopPropagation()
             playTree(root, treeIndex)
         }
@@ -200,7 +206,7 @@ function setupTree() {
         let treemap = d3.tree().size([width / NUM_TREES, height])
         
         // Assigns parent, children, height, depth
-        const root = d3.hierarchy<PointNode>(treeData as PointNode, d => (d as Tree).children as PointNode[])
+        const root = d3.hierarchy<PointNode>(JSON.parse(JSON.stringify(treeData)) as PointNode, d => (d as Tree).children as PointNode[])
         root.data.x0 = height / 2
         root.data.y0 = 0
         
@@ -208,16 +214,22 @@ function setupTree() {
 
         const Node = d3.hierarchy.prototype.constructor
         
-        function update(source: d3.HierarchyNode<PointNode>) {           
+        function update(source: d3.HierarchyNode<PointNode>) {
             // Assigns the x and y position for the nodes
+            // Always calculate layout with root for correctness
             const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(root as any) as any
 
             // Compute the new tree layout.
             var nodes = treeLayout.descendants(),
             links = treeLayout.descendants().slice(1)
-            
+
             // Normalize for fixed-depth.
-            nodes.forEach(d => { d.y = d.depth * 50 }) 
+            nodes.forEach(d => { d.y = d.depth * 50 })
+
+            // Find the node in the new layout that corresponds to source (for animations)
+            // This is needed because treemap creates new node objects
+            // Fall back to treeLayout (new layout root) if source node not found
+            const sourceNode = nodes.find(node => node.data === source.data) || treeLayout 
             
             // Update the nodes...
             const node = svg.selectAll('g.node')
@@ -226,7 +238,13 @@ function setupTree() {
             // Enter any new nodes at the parent's previous position.
             const nodeEnter = node.enter().append('g')
                 .attr('class', 'node')
-                .attr("transform", "translate(" + source.data.x0 + "," + -source.data.y0 + ")")
+                .attr("transform", (d: d3.HierarchyPointNode<PointNode>) => {
+                    const parent = d.parent;
+                    if (parent && parent.data.x0 !== undefined) {
+                        return "translate(" + parent.data.x0 + "," + -parent.data.y0 + ")";
+                    }
+                    return "translate(" + sourceNode.data.x0 + "," + -sourceNode.data.y0 + ")";
+                })
                 .on('click', clickNode)
             
             // var rectHeight = 60, rectWidth = 120
@@ -252,12 +270,20 @@ function setupTree() {
             
             // UPDATE
             const nodeUpdate = nodeEnter.merge(node as any)
-            
+
+            // Interrupt any ongoing transitions to prevent jank
+            nodeUpdate.interrupt()
+
             // Transition to the proper position for the node
             nodeUpdate.transition()
                 .duration(duration)
+                .ease(d3.easeCubicInOut)
                 .attr("transform", d => "translate(" + d.x + "," + -d.y + ")")
-            
+
+            // Update the text content (for when nodes transform)
+            nodeUpdate.select('text')
+                .text((d: d3.HierarchyPointNode<any>) => getEmoji(d.data.name))
+
             // Update the node attributes and style
             nodeUpdate.select('circle.node')
                 .attr('r', 10)
@@ -265,10 +291,13 @@ function setupTree() {
                 .attr('cursor', 'pointer')
             
             
-            // Remove any exiting nodes
+            // Remove any exiting nodes - all collapse to source as a unit
             const nodeExit = node.exit().transition()
                 .duration(duration)
-                .attr("transform", "translate(" + source.x + "," + -source.y! + ")")
+                .ease(d3.easeCubicInOut)
+                .attr("transform", function(this: any) {
+                    return "translate(" + sourceNode.x + "," + -sourceNode.y! + ")";
+                })
                 .remove()
             
             // On exit reduce the node circles size to 0
@@ -289,24 +318,30 @@ function setupTree() {
                 .on("click", clickLink)
                 .attr("stroke", "black")
                 .attr("stroke-width", 3)
-                .attr('d', () => {
-                    const o = { x: source.data.x0, y: source.data.y0 }
+                .attr('d', (d: d3.HierarchyPointNode<PointNode>) => {
+                    const parent = d.parent!;
+                    const o = { x: parent.data.x0, y: parent.data.y0 }
                     return diagonal(o, o)
                 })
             
             // UPDATE
             const linkUpdate = linkEnter.merge(link as any)
-            
+
+            // Interrupt any ongoing transitions to prevent jank
+            linkUpdate.interrupt()
+
             // Transition back to the parent element position
             linkUpdate.transition()
                 .duration(duration)
+                .ease(d3.easeCubicInOut)
                 .attr('d', function(d){ return diagonal(d, d.parent!) })
             
-            // Remove any exiting links
+            // Remove any exiting links - all collapse to source as a unit
             link.exit().transition()
                 .duration(duration)
-                .attr('d', () => {
-                    const o = { x: source.x!, y: source.y! }
+                .ease(d3.easeCubicInOut)
+                .attr('d', function(this: any) {
+                    const o = { x: sourceNode.x!, y: sourceNode.y! }
                     return diagonal(o, o)
                 })
                 .remove()
