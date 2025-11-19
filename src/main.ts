@@ -224,8 +224,8 @@ function setupTree() {
 
             // Find the node in the new layout that corresponds to source (for animations)
             // This is needed because treemap creates new node objects
-            // Fall back to root if source node not found (ensures valid x/y coordinates)
-            const sourceNode = nodes.find(node => node.data === source.data) || root 
+            // Fall back to treeLayout (new layout root) if source node not found
+            const sourceNode = nodes.find(node => node.data === source.data) || treeLayout 
             
             // Update the nodes...
             const node = svg.selectAll('g.node')
