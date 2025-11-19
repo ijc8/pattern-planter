@@ -391,4 +391,51 @@ setupTree()
 const repl = document.createElement('strudel-editor') as any
 repl.setAttribute('code', `...`)
 document.getElementById('strudel')!.append(repl)
+
+// Preload all samples on startup
+const preloadSamples = async () => {
+    // Poll until the editor is available
+    let attempts = 0
+    const maxAttempts = 100
+
+    while (attempts < maxAttempts) {
+        if (repl.editor) {
+            console.log('Editor initialized')
+            break
+        }
+        await new Promise(resolve => setTimeout(resolve, 100))
+        attempts++
+    }
+
+    if (!repl.editor) {
+        console.error('Editor failed to initialize')
+        return
+    }
+
+    // Wait for the base Strudel system to initialize
+    await new Promise(resolve => setTimeout(resolve, 1000))
+
+    // Filter out silence marker
+    const samplesToLoad = SAMPLE_ATOMS.filter(s => s !== "~")
+    console.log(`Preloading ${samplesToLoad.length + 1} samples...`)
+
+    // Build a Strudel pattern that includes all samples we want to preload
+    // Using gain(0) to trigger loading without playing audio
+    const samplePatterns = samplesToLoad.map(sample => `s("${sample}")`)
+    // Add piano sample
+    const allPatterns = [...samplePatterns, `note("c").s("piano")`]
+    const preloadCode = `stack(${allPatterns.join(',')}).gain(0)`
+
+    console.log('Preload code:', preloadCode)
+
+    // Set the code in the editor to trigger sample loading
+    repl.editor.setCode(preloadCode)
+
+    // Evaluate to actually load the samples
+    // This will trigger Strudel to fetch all the sample files
+    await repl.editor.evaluate()
+}
+
+preloadSamples()
+
 console.log(repl.editor)
