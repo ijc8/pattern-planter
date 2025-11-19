@@ -381,7 +381,7 @@ function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
 function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     sources[treeIndex] = convertTreeToExpression(tree)
     const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
-    const program = `// greetings from atlanta (data dancers)\nstack(${panned.join(",")})`
+    const program = `// salut wac :-)\nstack(${panned.join(",")})`
     repl.editor.setCode(program)
     repl.editor.evaluate()
 }
