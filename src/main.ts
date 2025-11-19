@@ -353,34 +353,16 @@ function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
 
 setupTree()
 
-// Sample preloading and loading indicator management
-const loadingIndicator = document.getElementById('loading-indicator')!
-const loadingStatus = document.getElementById('loading-status')!
-
-function updateLoadingStatus(status: string) {
-    loadingStatus.textContent = status
-}
-
-function hideLoadingIndicator() {
-    loadingIndicator.classList.add('hidden')
-}
-
-// Create Strudel editor
-updateLoadingStatus('Initializing Strudel editor...')
 const repl = document.createElement('strudel-editor') as any
 repl.setAttribute('code', `...`)
 document.getElementById('strudel')!.append(repl)
 
-// Monitor sample loading progress
-updateLoadingStatus('Loading sample libraries...')
-
-// Wait for the editor to be fully initialized and preload samples
+// Preload all samples on startup
 const preloadSamples = async () => {
     // Poll until the editor is available
     let attempts = 0
     const maxAttempts = 100
 
-    updateLoadingStatus('Initializing audio engine...')
     while (attempts < maxAttempts) {
         if (repl.editor) {
             console.log('Editor initialized')
@@ -392,7 +374,6 @@ const preloadSamples = async () => {
 
     if (!repl.editor) {
         console.error('Editor failed to initialize')
-        updateLoadingStatus('Failed to initialize editor')
         return
     }
 
@@ -402,10 +383,7 @@ const preloadSamples = async () => {
     try {
         // Filter out silence marker
         const samplesToLoad = SAMPLE_ATOMS.filter(s => s !== "~")
-        const totalSamples = samplesToLoad.length + 1 // +1 for piano
-
-        updateLoadingStatus(`Preparing to load ${totalSamples} samples...`)
-        console.log('Starting sample preload...')
+        console.log(`Preloading ${samplesToLoad.length + 1} samples...`)
 
         // Build a Strudel pattern that includes all samples we want to preload
         // Using gain(0) to trigger loading without playing audio
@@ -421,30 +399,10 @@ const preloadSamples = async () => {
 
         // Evaluate to actually load the samples
         // This will trigger Strudel to fetch all the sample files
-        updateLoadingStatus('Loading samples from audio banks...')
         await repl.editor.evaluate()
 
-        // Give samples time to load and show progress
-        // We track each sample individually for better UX
-        let loadedCount = 0
-        const updateDelay = Math.max(200, 4000 / totalSamples) // Spread updates over ~4 seconds
-
-        for (const sample of samplesToLoad) {
-            loadedCount++
-            updateLoadingStatus(`Loading ${sample}... (${loadedCount}/${totalSamples})`)
-            console.log(`Loading sample ${loadedCount}/${totalSamples}: ${sample}`)
-            await new Promise(resolve => setTimeout(resolve, updateDelay))
-        }
-
-        // Load piano
-        loadedCount++
-        updateLoadingStatus(`Loading piano... (${loadedCount}/${totalSamples})`)
-        console.log(`Loading sample ${loadedCount}/${totalSamples}: piano`)
-        await new Promise(resolve => setTimeout(resolve, updateDelay))
-
-        // Give extra time to ensure all samples are fully buffered
-        updateLoadingStatus('Finalizing audio buffers...')
-        await new Promise(resolve => setTimeout(resolve, 1000))
+        // Give samples time to load
+        await new Promise(resolve => setTimeout(resolve, 5000))
 
         // Stop the preload pattern
         repl.editor.hush()
@@ -452,18 +410,10 @@ const preloadSamples = async () => {
         // Reset to the default pattern
         repl.editor.setCode(`...`)
 
-        updateLoadingStatus('All samples loaded! 🎵')
         console.log('All samples preloaded successfully')
 
-        // Show success message briefly before hiding
-        await new Promise(resolve => setTimeout(resolve, 1000))
-        hideLoadingIndicator()
-
     } catch (error) {
-        console.error('Error loading samples:', error)
-        updateLoadingStatus('Error loading samples - some may be unavailable')
-        await new Promise(resolve => setTimeout(resolve, 2000))
-        hideLoadingIndicator()
+        console.error('Error preloading samples:', error)
     }
 }
 
