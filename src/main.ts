@@ -202,7 +202,7 @@ function setupTree() {
         let treemap = d3.tree().size([width / NUM_TREES, height])
         
         // Assigns parent, children, height, depth
-        const root = d3.hierarchy<PointNode>(treeData as PointNode, d => (d as Tree).children as PointNode[])
+        const root = d3.hierarchy<PointNode>(JSON.parse(JSON.stringify(treeData)) as PointNode, d => (d as Tree).children as PointNode[])
         root.data.x0 = height / 2
         root.data.y0 = 0
         
