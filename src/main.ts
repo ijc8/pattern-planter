@@ -248,7 +248,7 @@ function setupTree() {
                 .on('click', clickNode)
             
             // var rectHeight = 60, rectWidth = 120
-            const rectHeight = 20, rectWidth = 20
+            const rectHeight = 30, rectWidth = 30
             
             nodeEnter.append('rect')
                 .attr('class', 'node')
@@ -263,9 +263,10 @@ function setupTree() {
             // Add labels for the nodes
             nodeEnter.append('text')
                 .attr("class", "node-text")
-                .attr("dy", ".35em")
+                .attr("dy", ".4em")
                 .attr("x", rectWidth / 2)
                 .attr("text-anchor", "middle")
+                .style("font-size", "20px")
                 .text((d: d3.HierarchyPointNode<any>) => getEmoji(d.data.name))
             
             // UPDATE
@@ -381,7 +382,7 @@ function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
 function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     sources[treeIndex] = convertTreeToExpression(tree)
     const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
-    const program = `// salut wac :-)\nstack(${panned.join(",")})`
+    const program = `//ctrl/cmd+. to stop\nstack(${panned.join(",")})`
     repl.editor.setCode(program)
     repl.editor.evaluate()
 }
@@ -397,7 +398,7 @@ console.log(`Preloading ${samplesToLoad.length + 1} samples...`)
 const samplePatterns = samplesToLoad.map(sample => `s("${sample}")`)
 // Add piano sample
 const allPatterns = [...samplePatterns, `note("c").s("piano")`]
-const preloadCode = `// evaluate me first!\nstack(${allPatterns.join(',')}).gain(0)`
+const preloadCode = `// evaluate this (ctrl/cmd+enter) to pre-load samples\nstack(${allPatterns.join(',')}).gain(0)`
 
 console.log('Preload code:', preloadCode)
 
