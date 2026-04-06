@@ -56,6 +56,15 @@ function getEmoji(name: string): string {
 const NUM_TREES = 8
 const sources = [...new Array(NUM_TREES)].map(() => "silence")
 
+let nodeIdCounter = 0
+function nextNodeId(): string {
+    return `node_${nodeIdCounter++}`
+}
+
+const activeAtoms = new Set<string>()
+const atomTimeouts = new Map<string, number>()
+const treeRoots: d3.HierarchyNode<PointNode>[] = []
+
 function choice(array: any[]) {
     return array[Math.floor(Math.random() * array.length)]
 }
@@ -72,6 +81,7 @@ interface Point {
 interface Node {
     name: string
     fill: string
+    id?: string
 }
 
 interface Tree extends Node {
@@ -87,9 +97,11 @@ function setupTree() {
     const treeData: Tree = {
         name: " ",
         fill: "white",
+        id: nextNodeId(),
         children: [{
             name: "~",
-            fill: "white"
+            fill: "white",
+            id: nextNodeId(),
         }],
     }
 
@@ -122,6 +134,7 @@ function setupTree() {
                 data: {
                     name: genAtom(),
                     fill: "white",
+                    id: nextNodeId(),
                     x0: parent.x,
                     y0: parent.y,
                 }
@@ -148,6 +161,7 @@ function setupTree() {
                     data: {
                         name: genAtom(),
                         fill: "white",
+                        id: nextNodeId(),
                         x0: d.x,
                         y0: d.y,
                     }
@@ -165,6 +179,7 @@ function setupTree() {
                     data: {
                         name: oldName,
                         fill: "white",
+                        id: nextNodeId(),
                         x0: d.x,
                         y0: d.y,
                     }
@@ -176,6 +191,7 @@ function setupTree() {
                         data: {
                             name: genAtom(),
                             fill: "white",
+                            id: nextNodeId(),
                             x0: d.x,
                             y0: d.y,
                         }
@@ -197,6 +213,7 @@ function setupTree() {
         // moves the 'group' element to the top left margin
         const svg = _svg
             .append("g")
+            .attr("id", `tree-${treeIndex}`)
             .on("click", clickTree)
             .attr("transform", "translate(" + (margin.left + treeIndex * (width / NUM_TREES)) + "," + (height - margin.top) + ")")
 
@@ -209,7 +226,8 @@ function setupTree() {
         const root = d3.hierarchy<PointNode>(JSON.parse(JSON.stringify(treeData)) as PointNode, d => (d as Tree).children as PointNode[])
         root.data.x0 = height / 2
         root.data.y0 = 0
-        
+
+        treeRoots.push(root)
         update(root)
 
         const Node = d3.hierarchy.prototype.constructor
@@ -366,13 +384,43 @@ function setupTree() {
     }
 }
 
+function updateTreeColors(root: d3.HierarchyNode<PointNode>, treeIndex: number) {
+    const group = d3.select(`#tree-${treeIndex}`)
+    root.descendants().forEach(node => {
+        const isLeaf = !node.children || node.children.length === 0
+        if (isLeaf && node.data.id) {
+            node.data.fill = activeAtoms.has(node.data.id) ? "yellow" : "white"
+        }
+    })
+    group.selectAll<SVGRectElement, d3.HierarchyPointNode<PointNode>>('rect.node')
+        .style("fill", d => d.data.fill)
+}
+
+;(window as any).highlightAtoms = function(tags: any[]) {
+    if (!tags || tags.length === 0) return
+    for (const tag of tags) {
+        const id = tag.__pure
+        activeAtoms.add(id)
+        // Clear any existing timeout for this tag
+        const existing = atomTimeouts.get(id)
+        if (existing !== undefined) clearTimeout(existing)
+        // Set a timeout to remove the highlight
+        atomTimeouts.set(id, window.setTimeout(() => {
+            activeAtoms.delete(id)
+            atomTimeouts.delete(id)
+            treeRoots.forEach((root, i) => updateTreeColors(root, i))
+        }, 150))
+    }
+    treeRoots.forEach((root, i) => updateTreeColors(root, i))
+}
+
 function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
     if (tree.data.name === " ") { // HACK: Special case for root
         return convertTreeToExpression(tree.children![0])
     } else if (SAMPLE_ATOMS.includes(tree.data.name)) {
-        return `s("${tree.data.name}")`
+        return `s("${tree.data.name}").tag("${tree.data.id}")`
     } else if (NOTE_ATOMS.includes(tree.data.name)) {
-        return `note("${tree.data.name}").s("piano")`
+        return `note("${tree.data.name}").s("piano").tag("${tree.data.id}")`
     } else {
         const args = tree.children!.map(convertTreeToExpression).join(",")
         return `${tree.data.name}(${args})`
@@ -380,9 +428,17 @@ function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
 }
 
 function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
+    // Clear stale highlights when tree structure changes
+    for (const timeout of atomTimeouts.values()) clearTimeout(timeout)
+    atomTimeouts.clear()
+    activeAtoms.clear()
+    treeRoots.forEach((root, i) => updateTreeColors(root, i))
+
     sources[treeIndex] = convertTreeToExpression(tree)
     const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
-    const program = `//ctrl/cmd+. to stop\nstack(${panned.join(",")})`
+    // NOTE: The `onTrigger` call will need to be updated (drop the initial unused argument) after updating Strudel.
+    const triggerCall = `.onTrigger((_, hap, currentTime, cps, targetTime) => { const diff = Math.max(0, targetTime - currentTime); setTimeout(() => window.highlightAtoms(hap.context.tags || []), diff * 1000); }, false)`
+    const program = `//ctrl/cmd+. to stop\nstack(${panned.join(",")})${triggerCall}`
     repl.editor.setCode(program)
     repl.editor.evaluate()
 }
