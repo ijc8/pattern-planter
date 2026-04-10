@@ -72,7 +72,7 @@ const sources = [...new Array(NUM_TREES)].map(() => "silence")
 const treeIdCounters: number[] = Array.from({ length: NUM_TREES }, () => 0)
 
 function nextLocalId(treeIndex: number): string {
-    return `t${treeIndex}:${treeIdCounters[treeIndex]++}`
+    return `t${treeIndex}_${treeIdCounters[treeIndex]++}`
 }
 
 function initCounter(treeIndex: number) {

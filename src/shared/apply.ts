@@ -157,12 +157,12 @@ export function newTree(treeIndex: number): Tree {
     return {
         name: " ",
         fill: "white",
-        id: `t${treeIndex}:0`,
+        id: `t${treeIndex}_0`,
         children: [
             {
                 name: "~",
                 fill: "white",
-                id: `t${treeIndex}:1`,
+                id: `t${treeIndex}_1`,
             },
         ],
     }
@@ -172,7 +172,7 @@ export function newTree(treeIndex: number): Tree {
 // this tree. Owners use this to initialize their local id counter on claim so
 // that new ids don't collide with existing ones.
 export function maxNumericIdSuffix(tree: Tree, treeIndex: number): number {
-    const prefix = `t${treeIndex}:`
+    const prefix = `t${treeIndex}_`
     let max = -1
     const walk = (t: Tree) => {
         if (t.id.startsWith(prefix)) {
