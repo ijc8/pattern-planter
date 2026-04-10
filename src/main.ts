@@ -1,9 +1,19 @@
 import * as d3 from "d3"
 
-const SAMPLE_ATOMS = ["ocarina_small_stacc", "guiro", "psaltery_pluck", "sleighbells", "folkharp", "didgeridoo", "insect", "insect:2", "wind", "crow", "east", "~"]
-const NOTE_ATOMS = ["c2", "eb2", "g2", "bb2", "c3", "eb3", "g3", "bb3", "c", "eb", "g", "bb"]
-const UNARY_FUNCS = ["degrade", "brak", "rev"]
-const VARIADIC_FUNCS = ["stack", "chooseCycles", "seq", "cat"]
+import {
+    applyIntent,
+    classify,
+    maxNumericIdSuffix,
+    newTree as newTreeJson,
+    NUM_TREES,
+    NOTE_ATOMS,
+    SAMPLE_ATOMS,
+    UNARY_FUNCS,
+    VARIADIC_FUNCS,
+    Intent,
+    Tree,
+} from "./shared/apply"
+import { Net, HelloSnapshot } from "./net"
 
 // Emoji mapping for tree nodes
 const EMOJI_MAP: Record<string, string> = {
@@ -53,19 +63,27 @@ function getEmoji(name: string): string {
     return EMOJI_MAP[name] || "❓"
 }
 
-const NUM_TREES = 8
+// Authoritative tree state mirrored from the server.
+const treeJsons: Tree[] = Array.from({ length: NUM_TREES }, (_, i) => newTreeJson(i))
 const sources = [...new Array(NUM_TREES)].map(() => "silence")
 
-let nodeIdCounter = 0
-function nextNodeId(): string {
-    return `node_${nodeIdCounter++}`
+// Per-tree local id counter for the owner client. Initialized from the tree
+// snapshot on claim (max existing numeric suffix + 1).
+const treeIdCounters: number[] = Array.from({ length: NUM_TREES }, () => 0)
+
+function nextLocalId(treeIndex: number): string {
+    return `t${treeIndex}:${treeIdCounters[treeIndex]++}`
+}
+
+function initCounter(treeIndex: number) {
+    treeIdCounters[treeIndex] = maxNumericIdSuffix(treeJsons[treeIndex], treeIndex) + 1
 }
 
 const activeAtoms = new Set<string>()
 const atomTimeouts = new Map<string, number>()
 const treeRoots: d3.HierarchyNode<PointNode>[] = []
 
-function choice(array: any[]) {
+function choice<T>(array: T[]): T {
     return array[Math.floor(Math.random() * array.length)]
 }
 
@@ -78,36 +96,31 @@ interface Point {
     y: number
 }
 
-interface Node {
-    name: string
-    fill: string
-    id?: string
+// Extends the shared Tree shape with the mutable x0/y0 layout memory that d3
+// writes as it runs transitions. These fields are not serialized over the
+// network — the server stores plain Tree JSON.
+interface PointNode extends Tree {
+    x0?: number
+    y0?: number
+    children?: PointNode[]
 }
 
-interface Tree extends Node {
-    children?: Tree[]
-}
+// Ownership + player state (populated via Net callbacks).
+let myPlayerId: string | null = null
+let myColor: string = "white"
+const ownedTrees = new Set<number>()
+const claimOwners: (string | null)[] = Array.from({ length: NUM_TREES }, () => null)
+const playerColors = new Map<string, string>()
 
-interface PointNode extends Node {
-    x0: number
-    y0: number
+// Per-tree handles used to push network-originated state into the d3 layer.
+interface TreeHandle {
+    rebuild(sourceId: string | null): void
 }
+const treeHandles: TreeHandle[] = []
+
+let planterSvg: SVGSVGElement | null = null
 
 function setupTree() {
-    const treeData: Tree = {
-        name: " ",
-        fill: "white",
-        id: nextNodeId(),
-        children: [{
-            name: "~",
-            fill: "white",
-            id: nextNodeId(),
-        }],
-    }
-
-    // Lots of code here to try to correctly animate tree growth and decay, originally based on some d3 example code.
-    // Unfortunately it is a) gross and b) kind of broken. On the other hand, I got something working in time for the gig. :-)
-
     // https://stackoverflow.com/questions/69975911/rotate-tree-diagram-on-d3-js-v5-from-horizental-to-vertical
     // Set the dimensions and margins of the diagram
     const margin = {top: 20, right: 90, bottom: 30, left: 90},
@@ -116,6 +129,8 @@ function setupTree() {
     const _svg = d3.select("#planter").append("svg")
         .attr("width", width + margin.right + margin.left)
         .attr("height", height + margin.top + margin.bottom)
+        .attr("viewBox", `0 0 ${width + margin.right + margin.left} ${height + margin.top + margin.bottom}`)
+    planterSvg = _svg.node() as SVGSVGElement
 
     for (let treeIndex = 0; treeIndex < NUM_TREES; treeIndex++) {
 
@@ -124,90 +139,71 @@ function setupTree() {
         }
 
         function clickLink(e: Event, d: d3.HierarchyPointNode<PointNode>) {
-            console.log("clickLink", e, d)
-            const parent = d.parent!
-            const index = parent.children!.indexOf(d)
-            console.log("index", index)
-            const newNode = Object.assign(new Node, {
-                parent,
-                depth: parent.depth + 1,
-                data: {
-                    name: genAtom(),
-                    fill: "white",
-                    id: nextNodeId(),
-                    x0: parent.x,
-                    y0: parent.y,
-                }
-            })
-            parent.children![index] = newNode
-            update(parent)  // Use parent as source so removed subtree collapses to it
+            if (!ownedTrees.has(treeIndex)) return
+            const targetId = d.data.id
+            // Pre-roll: which atom to replace with, and its new id.
+            const intent: Intent = {
+                kind: "replace-link",
+                treeIndex,
+                targetId,
+                newAtomName: genAtom(),
+                newId: nextLocalId(treeIndex),
+            }
+            applyLocalIntent(intent)
             e.stopPropagation()
-            playTree(root, treeIndex)
-
         }
 
         function clickNode(e: Event, d: d3.HierarchyPointNode<PointNode>) {
-            console.log("clickNode", e, d)
+            if (!ownedTrees.has(treeIndex)) return
             // Prevent watering the root node
-            if (d.data.name === " ") {
+            if (d.data.name === " ") return
+            const kind = classify(d.data.name)
+            if (kind === "unary") {
+                // No mutation defined for unary function clicks (same as original).
                 return
             }
-            if (UNARY_FUNCS.includes(d.data.name)) {
-                console.log("can't grow this")
-            } else if (VARIADIC_FUNCS.includes(d.data.name)) {
-                d.children!.push(Object.assign(new Node, {
-                    parent: d,
-                    depth: d.depth + 1,
-                    data: {
-                        name: genAtom(),
-                        fill: "white",
-                        id: nextNodeId(),
-                        x0: d.x,
-                        y0: d.y,
-                    }
-                }))
-            } else {
-                // Atom; transform in place
-                const type = Math.random() < 0.25 ? "unary" : "variadic"
-                const oldName = d.data.name
-                // Update the node's name in place
-                d.data.name = type === "unary" ? choice(UNARY_FUNCS) : choice(VARIADIC_FUNCS)
-                // Create children for this node
-                d.children = [Object.assign(new Node, {
-                    parent: d,
-                    depth: d.depth + 1,
-                    data: {
-                        name: oldName,
-                        fill: "white",
-                        id: nextNodeId(),
-                        x0: d.x,
-                        y0: d.y,
-                    }
-                })]
-                if (type === "variadic") {
-                    d.children.push(Object.assign(new Node, {
-                        parent: d,
-                        depth: d.depth + 1,
-                        data: {
-                            name: genAtom(),
-                            fill: "white",
-                            id: nextNodeId(),
-                            x0: d.x,
-                            y0: d.y,
-                        }
-                    }))
-                    if (Math.random() < 0.5) {
-                        const tmp = d.children[0]
-                        d.children[0] = d.children[1]
-                        d.children[1] = tmp
-                    }
+            if (kind === "variadic") {
+                const intent: Intent = {
+                    kind: "add-child",
+                    treeIndex,
+                    targetId: d.data.id,
+                    newAtomName: genAtom(),
+                    newId: nextLocalId(treeIndex),
                 }
+                applyLocalIntent(intent)
+                e.stopPropagation()
+                return
             }
-            update(d)  // Use clicked node as source so new children enter from it
+            // Atom → function transform. Pre-roll everything.
+            const isVariadic = Math.random() >= 0.25
+            const newName = isVariadic ? choice(VARIADIC_FUNCS) : choice(UNARY_FUNCS)
+            const intent: Intent = {
+                kind: "grow-atom",
+                treeIndex,
+                targetId: d.data.id,
+                newName,
+                newAtomName: genAtom(),
+                isVariadic,
+                newIds: [nextLocalId(treeIndex), nextLocalId(treeIndex)],
+                swap: Math.random() < 0.5,
+            }
+            applyLocalIntent(intent)
             e.stopPropagation()
-            playTree(root, treeIndex)
         }
-        
+
+        function applyLocalIntent(intent: Intent) {
+            // Optimistic: apply locally first, then send.
+            let sourceId: string
+            try {
+                ;({ sourceId } = applyIntent(treeJsons[treeIndex], intent))
+            } catch (err) {
+                console.warn("local intent apply failed:", err)
+                return
+            }
+            rebuild(sourceId)
+            net.sendIntent(intent)
+        }
+
         // append the svg object to the body of the page
         // appends a 'group' element to 'svg'
         // moves the 'group' element to the top left margin
@@ -217,57 +213,74 @@ function setupTree() {
             .on("click", clickTree)
             .attr("transform", "translate(" + (margin.left + treeIndex * (width / NUM_TREES)) + "," + (height - margin.top) + ")")
 
-        let i = 0, duration = 2000
-        
+        const duration = 2000
+
         // declares a tree layout and assigns the size
-        let treemap = d3.tree().size([width / NUM_TREES, height])
-        
-        // Assigns parent, children, height, depth
-        const root = d3.hierarchy<PointNode>(JSON.parse(JSON.stringify(treeData)) as PointNode, d => (d as Tree).children as PointNode[])
+        const treemap = d3.tree().size([width / NUM_TREES, height])
+
+        // Assigns parent, children, height, depth. `root` is rebuilt in place
+        // after every mutation so that new Tree subtrees become HierarchyNodes.
+        // The d3 join key is `d.data.id`, so transitions remain coherent across
+        // rebuilds as long as ids are stable.
+        let root = d3.hierarchy<PointNode>(treeJsons[treeIndex] as PointNode, d => d.children)
         root.data.x0 = height / 2
         root.data.y0 = 0
 
         treeRoots.push(root)
+
+        function rebuild(sourceId: string | null) {
+            root = d3.hierarchy<PointNode>(treeJsons[treeIndex] as PointNode, d => d.children)
+            if (root.data.x0 === undefined) {
+                root.data.x0 = height / 2
+                root.data.y0 = 0
+            }
+            treeRoots[treeIndex] = root
+            const source =
+                (sourceId && root.descendants().find(n => n.data.id === sourceId)) || root
+            update(source)
+            playTree(root, treeIndex)
+        }
+
+        treeHandles.push({ rebuild })
+
         update(root)
 
-        const Node = d3.hierarchy.prototype.constructor
-        
         function update(source: d3.HierarchyNode<PointNode>) {
             // Assigns the x and y position for the nodes
             // Always calculate layout with root for correctness
             const treeLayout: d3.HierarchyPointNode<PointNode> = treemap(root as any) as any
 
             // Compute the new tree layout.
-            var nodes = treeLayout.descendants(),
+            const nodes = treeLayout.descendants(),
             links = treeLayout.descendants().slice(1)
 
             // Normalize for fixed-depth.
             nodes.forEach(d => { d.y = d.depth * 50 })
 
-            // Find the node in the new layout that corresponds to source (for animations)
-            // This is needed because treemap creates new node objects
-            // Fall back to treeLayout (new layout root) if source node not found
-            const sourceNode = nodes.find(node => node.data === source.data) || treeLayout 
-            
+            // Find the node in the new layout that corresponds to source (for animations).
+            // Since data objects are shared between the old and new hierarchies (we rebuild
+            // from the same Tree JSON), reference equality is sufficient.
+            const sourceNode = nodes.find(node => node.data === source.data) || treeLayout
+
             // Update the nodes...
             const node = svg.selectAll('g.node')
-                .data(nodes, (d: any) => (d.id || (d.id = ++i)))
-            
+                .data(nodes, (d: any) => d.data.id)
+
             // Enter any new nodes at the parent's previous position.
             const nodeEnter = node.enter().append('g')
                 .attr('class', 'node')
                 .attr("transform", (d: d3.HierarchyPointNode<PointNode>) => {
                     const parent = d.parent;
                     if (parent && parent.data.x0 !== undefined) {
-                        return "translate(" + parent.data.x0 + "," + -parent.data.y0 + ")";
+                        return "translate(" + parent.data.x0 + "," + -parent.data.y0! + ")";
                     }
-                    return "translate(" + sourceNode.data.x0 + "," + -sourceNode.data.y0 + ")";
+                    return "translate(" + sourceNode.data.x0 + "," + -sourceNode.data.y0! + ")";
                 })
                 .on('click', clickNode)
-            
+
             // var rectHeight = 60, rectWidth = 120
             const rectHeight = 30, rectWidth = 30
-            
+
             nodeEnter.append('rect')
                 .attr('class', 'node')
                 .attr("width", rectWidth)
@@ -277,7 +290,7 @@ function setupTree() {
                 .attr("rx","5")
                 .style("fill", (d: d3.HierarchyPointNode<any>) => d.data.fill)
                 .style("stroke", "black")
-            
+
             // Add labels for the nodes
             nodeEnter.append('text')
                 .attr("class", "node-text")
@@ -286,7 +299,7 @@ function setupTree() {
                 .attr("text-anchor", "middle")
                 .style("font-size", "20px")
                 .text((d: d3.HierarchyPointNode<any>) => getEmoji(d.data.name))
-            
+
             // UPDATE
             const nodeUpdate = nodeEnter.merge(node as any)
 
@@ -308,8 +321,8 @@ function setupTree() {
                 .attr('r', 10)
                 .style("fill", d => d.children ? "lightsteelblue" : "#fff")
                 .attr('cursor', 'pointer')
-            
-            
+
+
             // Remove any exiting nodes - all collapse to source as a unit
             const nodeExit = node.exit().transition()
                 .duration(duration)
@@ -318,19 +331,19 @@ function setupTree() {
                     return "translate(" + sourceNode.x + "," + -sourceNode.y! + ")";
                 })
                 .remove()
-            
+
             // On exit reduce the node circles size to 0
             nodeExit.select('circle')
                 .attr('r', 1e-6)
-            
+
             // On exit reduce the opacity of text labels
             nodeExit.select('text')
                 .style('fill-opacity', 1e-6)
-            
+
             // Update the links...
             const link = svg.selectAll('path.link')
-                .data(links, (d: any) => d.id)
-            
+                .data(links, (d: any) => d.data.id)
+
             // Enter any new links at the parent's previous position.
             const linkEnter = link.enter().insert('path', "g")
                 .attr("class", "link")
@@ -339,10 +352,10 @@ function setupTree() {
                 .attr("stroke-width", 3)
                 .attr('d', (d: d3.HierarchyPointNode<PointNode>) => {
                     const parent = d.parent!;
-                    const o = { x: parent.data.x0, y: parent.data.y0 }
+                    const o = { x: parent.data.x0 ?? 0, y: parent.data.y0 ?? 0 }
                     return diagonal(o, o)
                 })
-            
+
             // UPDATE
             const linkUpdate = linkEnter.merge(link as any)
 
@@ -354,7 +367,7 @@ function setupTree() {
                 .duration(duration)
                 .ease(d3.easeCubicInOut)
                 .attr('d', function(d){ return diagonal(d, d.parent!) })
-            
+
             // Remove any exiting links - all collapse to source as a unit
             link.exit().transition()
                 .duration(duration)
@@ -364,7 +377,7 @@ function setupTree() {
                     return diagonal(o, o)
                 })
                 .remove()
-            
+
             // Store the old positions for transition.
             nodes.forEach((d: d3.HierarchyPointNode<any>) => {
                 d.data.x0 = d.x
@@ -377,7 +390,7 @@ function setupTree() {
                     C ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-s.y},
                     ${(s.x + d.x) / 2 + (rectWidth / 2)} ${-d.y},
                     ${d.x + (rectWidth / 2)} ${-d.y}`
-                
+
                 return path
             }
         }
@@ -427,6 +440,9 @@ function convertTreeToExpression(tree: d3.HierarchyNode<PointNode>): string {
     }
 }
 
+// Trailing-debounce Strudel re-evaluation per tree, so a burst of mutations
+// (local + relayed) doesn't thrash the scheduler.
+const playTreeTimeouts: (number | null)[] = Array.from({ length: NUM_TREES }, () => null)
 function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     // Clear stale highlights when tree structure changes
     for (const timeout of atomTimeouts.values()) clearTimeout(timeout)
@@ -435,15 +451,213 @@ function playTree(tree: d3.HierarchyNode<PointNode>, treeIndex: number) {
     treeRoots.forEach((root, i) => updateTreeColors(root, i))
 
     sources[treeIndex] = convertTreeToExpression(tree)
-    const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
-    // NOTE: The `onTrigger` call will need to be updated (drop the initial unused argument) after updating Strudel.
-    const triggerCall = `.onTrigger((_, hap, currentTime, cps, targetTime) => { const diff = Math.max(0, targetTime - currentTime); setTimeout(() => window.highlightAtoms(hap.context.tags || []), diff * 1000); }, false)`
-    const program = `//ctrl/cmd+. to stop\nstack(${panned.join(",")})${triggerCall}`
-    repl.editor.setCode(program)
-    repl.editor.evaluate()
+
+    if (playTreeTimeouts[treeIndex] !== null) clearTimeout(playTreeTimeouts[treeIndex]!)
+    playTreeTimeouts[treeIndex] = window.setTimeout(() => {
+        playTreeTimeouts[treeIndex] = null
+        const panned = sources.map((s, i) => `${s}.pan(${i / (NUM_TREES - 1)})`)
+        // NOTE: The `onTrigger` call will need to be updated (drop the initial unused argument) after updating Strudel.
+        const triggerCall = `.onTrigger((_, hap, currentTime, cps, targetTime) => { const diff = Math.max(0, targetTime - currentTime); setTimeout(() => window.highlightAtoms(hap.context.tags || []), diff * 1000); }, false)`
+        const program = `//ctrl/cmd+. to stop\nstack(${panned.join(",")})${triggerCall}`
+        repl.editor.setCode(program)
+        repl.editor.evaluate()
+    }, 100)
 }
 
 setupTree()
+
+// ----- network client ------------------------------------------------------
+
+function replaceAllTrees(snapshot: HelloSnapshot) {
+    for (let i = 0; i < NUM_TREES; i++) {
+        treeJsons[i] = snapshot.trees[i]
+        treeHandles[i].rebuild(null)
+        claimOwners[i] = snapshot.claims[i] ?? null
+    }
+    ownedTrees.clear()
+    if (myPlayerId) {
+        for (let i = 0; i < NUM_TREES; i++) {
+            if (claimOwners[i] === myPlayerId) {
+                ownedTrees.add(i)
+                initCounter(i)
+            }
+        }
+    }
+}
+
+const wsUrl = (() => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:"
+    return `${proto}//${location.host}/ws`
+})()
+
+const net = new Net(wsUrl, {
+    onHello(playerId, color, snapshot) {
+        myPlayerId = playerId
+        myColor = color
+        playerColors.set(playerId, color)
+        for (const p of snapshot.players) playerColors.set(p.id, p.color)
+        replaceAllTrees(snapshot)
+        renderClaimBar()
+    },
+    onPlayerJoin(playerId, color) {
+        playerColors.set(playerId, color)
+    },
+    onPlayerLeave(playerId) {
+        playerColors.delete(playerId)
+        removeRemoteCursor(playerId)
+    },
+    onClaimUpdate(treeIndex, ownerId) {
+        claimOwners[treeIndex] = ownerId
+        if (ownerId === myPlayerId) {
+            if (!ownedTrees.has(treeIndex)) {
+                ownedTrees.add(treeIndex)
+                initCounter(treeIndex)
+            }
+        } else {
+            ownedTrees.delete(treeIndex)
+        }
+        renderClaimBar()
+    },
+    onClaimResult(treeIndex, ok, reason) {
+        if (!ok) console.warn(`claim ${treeIndex} rejected: ${reason}`)
+    },
+    onIntent(intent, _senderId) {
+        try {
+            const { sourceId } = applyIntent(treeJsons[intent.treeIndex], intent)
+            treeHandles[intent.treeIndex].rebuild(sourceId)
+        } catch (err) {
+            console.warn("remote intent apply failed:", err)
+        }
+    },
+    onCursor(playerId, color, x, y, visible) {
+        updateRemoteCursor(playerId, color, x, y, visible)
+    },
+    onStatusChange(status) {
+        const pill = document.getElementById("status-pill")
+        if (!pill) return
+        pill.textContent =
+            status === "open" ? `● connected ${myPlayerId ?? ""}` :
+            status === "connecting" ? "connecting…" :
+            "disconnected"
+        pill.style.background =
+            status === "open" ? "rgba(40, 140, 40, 0.85)" :
+            status === "connecting" ? "rgba(140, 140, 40, 0.85)" :
+            "rgba(140, 40, 40, 0.85)"
+    },
+})
+
+// ----- claim bar UI --------------------------------------------------------
+
+function renderClaimBar() {
+    const bar = document.getElementById("claim-bar")
+    if (!bar) return
+    bar.replaceChildren()
+    for (let i = 0; i < NUM_TREES; i++) {
+        const btn = document.createElement("button")
+        btn.className = "claim-btn"
+        const owner = claimOwners[i]
+        if (owner === null) {
+            btn.textContent = `claim t${i}`
+            btn.addEventListener("click", () => net.claim(i))
+        } else if (owner === myPlayerId) {
+            btn.classList.add("mine")
+            btn.textContent = `you · t${i} (release)`
+            btn.addEventListener("click", () => net.release(i))
+        } else {
+            btn.classList.add("taken")
+            const dot = document.createElement("span")
+            dot.className = "owner-dot"
+            dot.style.background = playerColors.get(owner) ?? "#888"
+            btn.append(dot, `t${i} taken`)
+            btn.disabled = true
+        }
+        bar.append(btn)
+    }
+}
+
+// ----- cursors -------------------------------------------------------------
+
+const remoteCursorEls = new Map<string, HTMLDivElement>()
+
+function getRemoteCursorEl(playerId: string, color: string): HTMLDivElement {
+    let el = remoteCursorEls.get(playerId)
+    if (!el) {
+        el = document.createElement("div")
+        el.className = "remote-cursor"
+        el.style.background = color
+        const label = document.createElement("span")
+        label.className = "label"
+        label.textContent = playerId
+        label.style.background = "rgba(0,0,0,0.7)"
+        el.append(label)
+        document.getElementById("cursors")!.append(el)
+        remoteCursorEls.set(playerId, el)
+    }
+    return el
+}
+
+function removeRemoteCursor(playerId: string) {
+    const el = remoteCursorEls.get(playerId)
+    if (el) {
+        el.remove()
+        remoteCursorEls.delete(playerId)
+    }
+}
+
+// `x`,`y` are SVG user-space coordinates (the same coords d3 uses internally
+// via the root SVG's viewBox). Convert to client pixels using the SVG's
+// current screen CTM, then position the cursor div in page coordinates.
+function updateRemoteCursor(playerId: string, color: string, x: number, y: number, visible: boolean) {
+    if (!visible) {
+        removeRemoteCursor(playerId)
+        return
+    }
+    if (!planterSvg) return
+    const ctm = planterSvg.getScreenCTM()
+    if (!ctm) return
+    const pt = planterSvg.createSVGPoint()
+    pt.x = x
+    pt.y = y
+    const screen = pt.matrixTransform(ctm)
+    const el = getRemoteCursorEl(playerId, color)
+    el.style.left = `${screen.x}px`
+    el.style.top = `${screen.y}px`
+}
+
+// Local mousemove → SVG coordinates → throttled send.
+let pendingCursor: { x: number; y: number } | null = null
+let cursorRafScheduled = false
+function handleMouseMove(ev: MouseEvent) {
+    if (!planterSvg) return
+    const ctm = planterSvg.getScreenCTM()
+    if (!ctm) return
+    const pt = planterSvg.createSVGPoint()
+    pt.x = ev.clientX
+    pt.y = ev.clientY
+    const svgPt = pt.matrixTransform(ctm.inverse())
+    pendingCursor = { x: svgPt.x, y: svgPt.y }
+    if (!cursorRafScheduled) {
+        cursorRafScheduled = true
+        requestAnimationFrame(() => {
+            cursorRafScheduled = false
+            if (pendingCursor) {
+                net.sendCursor(pendingCursor.x, pendingCursor.y, true)
+                pendingCursor = null
+            }
+        })
+    }
+}
+window.addEventListener("mousemove", handleMouseMove)
+window.addEventListener("mouseleave", () => {
+    net.sendCursor(0, 0, false)
+})
+
+// Use myColor to tint the status pill text so players can tell apart two
+// browser tabs at a glance.
+document.addEventListener("DOMContentLoaded", () => {
+    const pill = document.getElementById("status-pill")
+    if (pill) pill.style.borderLeft = `6px solid ${myColor}`
+})
 
 // Filter out silence marker
 const samplesToLoad = SAMPLE_ATOMS.filter(s => s !== "~")

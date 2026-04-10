@@ -98,6 +98,85 @@
         object-fit: cover;
         z-index: -1;
       }
+
+      #claim-bar {
+        display: flex;
+        width: 100%;
+        gap: 2px;
+      }
+
+      #claim-bar .claim-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding: 6px 4px;
+        font-family: 'Recursive', monospace;
+        font-size: 14px;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        cursor: pointer;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #claim-bar .claim-btn.mine {
+        background: rgba(40, 140, 40, 0.85);
+      }
+      #claim-bar .claim-btn.taken {
+        background: rgba(80, 80, 80, 0.8);
+        cursor: not-allowed;
+      }
+      #claim-bar .claim-btn .owner-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        vertical-align: middle;
+        margin-right: 4px;
+      }
+
+      #cursors {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 1000;
+      }
+      .remote-cursor {
+        position: absolute;
+        transform: translate(-2px, -2px);
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        border: 2px solid white;
+        box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
+        pointer-events: none;
+      }
+      .remote-cursor .label {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        font-family: 'Recursive', monospace;
+        font-size: 11px;
+        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 1px 4px;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
+
+      #status-pill {
+        position: fixed;
+        top: 8px;
+        right: 8px;
+        z-index: 1001;
+        font-family: 'Recursive', monospace;
+        font-size: 12px;
+        color: white;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 4px 8px;
+        border-radius: 4px;
+      }
     </style>
   </head>
   <body>
@@ -106,8 +185,11 @@
         <source src="background.mp4" type="video/mp4">
       </video>
       <div id="planter"></div>
+      <div id="claim-bar"></div>
       <div id="strudel"></div>
     </div>
+    <div id="cursors"></div>
+    <div id="status-pill">connecting…</div>
     <script type="module" src="/src/main.ts"></script>
     <script type="module" src="/strudel.js"></script>
   </body>
