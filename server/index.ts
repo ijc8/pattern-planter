@@ -122,17 +122,46 @@ const httpServer = http.createServer((req, res) => {
 
 const wss = new WebSocketServer({ server: httpServer, path: "/ws" })
 
+// Ping/pong heartbeat to detect dead connections (e.g. wifi dropout).
+// Without this, TCP can take minutes to notice a lost peer.
+const PING_INTERVAL = 10_000  // send ping every 10s
+const PONG_TIMEOUT = 30_000   // terminate if no pong within 30s
+
+const alive = new Map<WebSocket, number>()  // ws → last pong timestamp
+
+const heartbeat = setInterval(() => {
+    const now = Date.now()
+    for (const [ws, lastPong] of alive) {
+        if (now - lastPong > PONG_TIMEOUT) {
+            console.log("[heartbeat] terminating unresponsive client")
+            ws.terminate()
+            alive.delete(ws)
+        } else {
+            ws.ping()
+        }
+    }
+}, PING_INTERVAL)
+
+wss.on("close", () => clearInterval(heartbeat))
+
 wss.on("connection", (ws) => {
     const id = randomId()
     const color = colorFor(id)
     const player: Player = { id, color, ws }
     players.set(id, player)
+    alive.set(ws, Date.now())
     console.log(`[join] ${id} (${players.size} total)`)
 
     send(ws, { type: "hello", playerId: id, color, snapshot: snapshot() })
     broadcast({ type: "player-join", playerId: id, color }, id)
 
+    ws.on("pong", () => {
+        alive.set(ws, Date.now())
+    })
+
     ws.on("message", (data) => {
+        // Any incoming data also proves the connection is alive.
+        alive.set(ws, Date.now())
         let msg: any
         try {
             msg = JSON.parse(data.toString())
@@ -143,6 +172,7 @@ wss.on("connection", (ws) => {
     })
 
     ws.on("close", () => {
+        alive.delete(ws)
         players.delete(id)
         for (let i = 0; i < NUM_TREES; i++) {
             if (claims[i] === id) {
