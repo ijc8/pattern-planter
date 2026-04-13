@@ -23,7 +23,7 @@ import { existsSync } from "node:fs"
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, "..", "dist")
-const SAMPLES_DIR = path.resolve(__dirname, "..", "dough-samples")
+const SAMPLES_DIR = path.resolve(__dirname, "..", "samples")
 const PORT = Number(process.env.PORT ?? 8080)
 
 // ----- server state --------------------------------------------------------
@@ -282,6 +282,6 @@ httpServer.listen(PORT, () => {
         console.log(`  samples: ${SAMPLES_DIR}`)
     } else {
         console.warn(`  ⚠ samples directory not found: ${SAMPLES_DIR}`)
-        console.warn(`    run: git clone --recurse-submodules https://github.com/felixroos/dough-samples.git`)
+        console.warn(`    run: npm run setup-samples`)
     }
 })
