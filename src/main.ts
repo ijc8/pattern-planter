@@ -659,6 +659,30 @@ document.addEventListener("DOMContentLoaded", () => {
     if (pill) pill.style.borderLeft = `6px solid ${myColor}`
 })
 
+// Redirect Strudel's sample fetches from GitHub to the local server so the app
+// works on a LAN without internet. This intercepts fetch() BEFORE the
+// <strudel-editor> element is created, so prebake's own sample registry loads
+// are redirected transparently — no need to call samples() ourselves (which
+// would create an AudioContext before a user gesture).
+const sampleRedirects: [string, string][] = [
+    ["https://raw.githubusercontent.com/felixroos/dough-samples/main/", "/samples/"],
+    ["https://raw.githubusercontent.com/tidalcycles/Dirt-Samples/master/", "/samples/Dirt-Samples/"],
+    ["https://raw.githubusercontent.com/sgossner/VCSL/master/", "/samples/VCSL/"],
+    ["https://raw.githubusercontent.com/geikha/tidal-drum-machines/main/", "/samples/tidal-drum-machines/"],
+]
+const _origFetch = window.fetch.bind(window)
+window.fetch = function (input: RequestInfo | URL, init?: RequestInit) {
+    if (typeof input === "string") {
+        for (const [from, to] of sampleRedirects) {
+            if (input.startsWith(from)) {
+                input = to + input.slice(from.length)
+                break
+            }
+        }
+    }
+    return _origFetch(input, init)
+}
+
 // Filter out silence marker
 const samplesToLoad = SAMPLE_ATOMS.filter(s => s !== "~")
 console.log(`Preloading ${samplesToLoad.length + 1} samples...`)
@@ -675,5 +699,3 @@ console.log('Preload code:', preloadCode)
 const repl = document.createElement('strudel-editor') as any
 repl.setAttribute('code', preloadCode)
 document.getElementById('strudel')!.append(repl)
-
-console.log(repl.editor)

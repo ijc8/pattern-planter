@@ -7,7 +7,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "server": "tsx server/index.ts",
-    "start": "npm run build && npm run server"
+    "start": "npm run build && npm run server",
+    "setup-samples": "git clone https://github.com/felixroos/dough-samples.git && cd dough-samples && git submodule update --init"
   },
   "devDependencies": {
     "@types/d3": "^7.4.3",

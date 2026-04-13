@@ -19,8 +19,11 @@ import {
     Intent,
 } from "../src/shared/apply"
 
+import { existsSync } from "node:fs"
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = path.resolve(__dirname, "..", "dist")
+const SAMPLES_DIR = path.resolve(__dirname, "..", "dough-samples")
 const PORT = Number(process.env.PORT ?? 8080)
 
 // ----- server state --------------------------------------------------------
@@ -87,20 +90,45 @@ const MIME: Record<string, string> = {
     ".mp4": "video/mp4",
     ".mp3": "audio/mpeg",
     ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".flac": "audio/flac",
     ".ico": "image/x-icon",
     ".map": "application/json; charset=utf-8",
+}
+
+function resolveInDir(dir: string, pathname: string): string | null {
+    const resolved = path.resolve(dir, "." + pathname)
+    if (!resolved.startsWith(dir)) return null
+    return resolved
 }
 
 async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
     const url = new URL(req.url ?? "/", "http://localhost")
     let pathname = decodeURIComponent(url.pathname)
-    if (pathname === "/") pathname = "/index.html"
-    // Resolve safely inside DIST_DIR.
-    const resolved = path.resolve(DIST_DIR, "." + pathname)
-    if (!resolved.startsWith(DIST_DIR)) {
-        res.writeHead(403).end("forbidden")
+
+    // /samples/* → serve from dough-samples/ directory (local sample library).
+    if (pathname.startsWith("/samples/")) {
+        const samplePath = pathname.slice("/samples".length) // e.g. "/piano.json"
+        const resolved = resolveInDir(SAMPLES_DIR, samplePath)
+        if (!resolved) { res.writeHead(403).end("forbidden"); return }
+        try {
+            const body = await readFile(resolved)
+            const ext = path.extname(resolved).toLowerCase()
+            res.writeHead(200, {
+                "content-type": MIME[ext] ?? "application/octet-stream",
+                "access-control-allow-origin": "*",
+            })
+            res.end(body)
+        } catch {
+            res.writeHead(404).end("not found")
+        }
         return
     }
+
+    // Everything else → serve from dist/.
+    if (pathname === "/") pathname = "/index.html"
+    const resolved = resolveInDir(DIST_DIR, pathname)
+    if (!resolved) { res.writeHead(403).end("forbidden"); return }
     try {
         const body = await readFile(resolved)
         const ext = path.extname(resolved).toLowerCase()
@@ -250,4 +278,10 @@ httpServer.listen(PORT, () => {
     console.log(`pattern-planter server on http://localhost:${PORT}`)
     console.log(`  static: ${DIST_DIR}`)
     console.log(`  ws:     ws://localhost:${PORT}/ws`)
+    if (existsSync(SAMPLES_DIR)) {
+        console.log(`  samples: ${SAMPLES_DIR}`)
+    } else {
+        console.warn(`  ⚠ samples directory not found: ${SAMPLES_DIR}`)
+        console.warn(`    run: git clone --recurse-submodules https://github.com/felixroos/dough-samples.git`)
+    }
 })
