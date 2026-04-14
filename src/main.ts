@@ -1,5 +1,32 @@
 import * as d3 from "d3"
 
+// HACK: track AudioContexts so we can resume them on the first user gesture.
+// The bundled strudel.js exports `initAudioOnFirstClick` but never calls it,
+// and its `getAudioContext` is trapped in the module closure — so the context
+// created during prebake starts suspended and has no way to be resumed from
+// userland. We patch the constructor before strudel.js loads and its editor
+// mounts. Revisit if we ever switch from the prebuilt bundle to the @strudel
+// npm packages, which expose the audio lifecycle directly.
+const _liveAudioContexts: AudioContext[] = []
+for (const key of ["AudioContext", "webkitAudioContext"] as const) {
+    const Orig = (window as any)[key] as typeof AudioContext | undefined
+    if (!Orig) continue
+    ;(window as any)[key] = class extends Orig {
+        constructor(...args: any[]) {
+            super(...(args as []))
+            _liveAudioContexts.push(this as unknown as AudioContext)
+        }
+    }
+}
+function _resumeAllAudioContexts() {
+    for (const ctx of _liveAudioContexts) {
+        if (ctx.state === "suspended") ctx.resume().catch(() => {})
+    }
+}
+for (const evt of ["pointerdown", "keydown", "touchstart"] as const) {
+    window.addEventListener(evt, _resumeAllAudioContexts, { capture: true })
+}
+
 import {
     applyIntent,
     classify,
