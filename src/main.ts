@@ -40,7 +40,16 @@ import {
     Intent,
     Tree,
 } from "./shared/apply"
-import { Net, HelloSnapshot } from "./net"
+import { Net, HelloSnapshot, CursorTool } from "./net"
+
+// Hotspots must match the CSS `cursor:` declarations in index.html so that
+// remote cursors line up with where the local cursor would point.
+const CURSOR_ICONS: Record<CursorTool, { src: string; hx: number; hy: number }> = {
+    hand:      { src: "/hand.png",             hx: 5, hy: 2 },
+    can:       { src: "/watering-can.png",     hx: 0, hy: 10 },
+    "can-pour": { src: "/watering-can-pour.png", hx: 0, hy: 10 },
+    shears:    { src: "/shears.png",           hx: 5, hy: 5 },
+}
 
 // Emoji mapping for tree nodes
 const EMOJI_MAP: Record<string, string> = {
@@ -510,6 +519,13 @@ function replaceAllTrees(snapshot: HelloSnapshot) {
             }
         }
     }
+    for (let i = 0; i < NUM_TREES; i++) syncTreeOwnedClass(i)
+}
+
+function syncTreeOwnedClass(treeIndex: number) {
+    const g = document.getElementById(`tree-${treeIndex}`)
+    if (!g) return
+    g.classList.toggle("owned", ownedTrees.has(treeIndex))
 }
 
 const wsUrl = (() => {
@@ -543,6 +559,7 @@ const net = new Net(wsUrl, {
         } else {
             ownedTrees.delete(treeIndex)
         }
+        syncTreeOwnedClass(treeIndex)
         renderClaimBar()
     },
     onClaimResult(treeIndex, ok, reason) {
@@ -556,8 +573,8 @@ const net = new Net(wsUrl, {
             console.warn("remote intent apply failed:", err)
         }
     },
-    onCursor(playerId, color, x, y, visible) {
-        updateRemoteCursor(playerId, color, x, y, visible)
+    onCursor(playerId, color, pos) {
+        updateRemoteCursor(playerId, color, pos)
     },
     onStatusChange(status) {
         const pill = document.getElementById("status-pill")
@@ -604,38 +621,49 @@ function renderClaimBar() {
 
 // ----- cursors -------------------------------------------------------------
 
-const remoteCursorEls = new Map<string, HTMLDivElement>()
+interface RemoteCursorEls {
+    wrap: HTMLDivElement
+    icon: HTMLImageElement
+    ring: HTMLDivElement
+    tool: CursorTool | null
+}
+const remoteCursorEls = new Map<string, RemoteCursorEls>()
 
-function getRemoteCursorEl(playerId: string, color: string): HTMLDivElement {
-    let el = remoteCursorEls.get(playerId)
-    if (!el) {
-        el = document.createElement("div")
-        el.className = "remote-cursor"
-        el.style.background = color
+function getRemoteCursorEl(playerId: string, color: string): RemoteCursorEls {
+    let entry = remoteCursorEls.get(playerId)
+    if (!entry) {
+        const wrap = document.createElement("div")
+        wrap.className = "remote-cursor"
+        const icon = document.createElement("img")
+        icon.className = "icon"
+        const ring = document.createElement("div")
+        ring.className = "ring"
+        ring.style.borderColor = color
         const label = document.createElement("span")
         label.className = "label"
         label.textContent = playerId
-        label.style.background = "rgba(0,0,0,0.7)"
-        el.append(label)
-        document.getElementById("cursors")!.append(el)
-        remoteCursorEls.set(playerId, el)
+        wrap.append(icon, ring, label)
+        document.getElementById("cursors")!.append(wrap)
+        entry = { wrap, icon, ring, tool: null }
+        remoteCursorEls.set(playerId, entry)
     }
-    return el
+    return entry
 }
 
 function removeRemoteCursor(playerId: string) {
-    const el = remoteCursorEls.get(playerId)
-    if (el) {
-        el.remove()
+    const entry = remoteCursorEls.get(playerId)
+    if (entry) {
+        entry.wrap.remove()
         remoteCursorEls.delete(playerId)
     }
 }
 
 // `x`,`y` are SVG user-space coordinates (the same coords d3 uses internally
 // via the root SVG's viewBox). Convert to client pixels using the SVG's
-// current screen CTM, then position the cursor div in page coordinates.
-function updateRemoteCursor(playerId: string, color: string, x: number, y: number, visible: boolean) {
-    if (!visible) {
+// current screen CTM, then position the cursor div so its hotspot (per the
+// tool icon) lands at the reported point.
+function updateRemoteCursor(playerId: string, color: string, pos: { x: number; y: number; tool: CursorTool } | null) {
+    if (!pos) {
         removeRemoteCursor(playerId)
         return
     }
@@ -643,16 +671,38 @@ function updateRemoteCursor(playerId: string, color: string, x: number, y: numbe
     const ctm = planterSvg.getScreenCTM()
     if (!ctm) return
     const pt = planterSvg.createSVGPoint()
-    pt.x = x
-    pt.y = y
+    pt.x = pos.x
+    pt.y = pos.y
     const screen = pt.matrixTransform(ctm)
-    const el = getRemoteCursorEl(playerId, color)
-    el.style.left = `${screen.x}px`
-    el.style.top = `${screen.y}px`
+    const entry = getRemoteCursorEl(playerId, color)
+    if (entry.tool !== pos.tool) {
+        const { src, hx, hy } = CURSOR_ICONS[pos.tool]
+        entry.icon.src = src
+        entry.icon.style.left = `${-hx}px`
+        entry.icon.style.top = `${-hy}px`
+        entry.tool = pos.tool
+    }
+    entry.wrap.style.left = `${screen.x}px`
+    entry.wrap.style.top = `${screen.y}px`
+}
+
+// Determine which cursor tool the local user is showing based on the element
+// under the pointer. Only owned trees get the watering-can/shears tools; other
+// trees fall back to the default hand.
+let mouseDown = false
+function toolFromEvent(ev: MouseEvent): CursorTool {
+    const target = ev.target as Element | null
+    if (!target) return "hand"
+    const treeGroup = target.closest?.("g[id^='tree-']") as SVGGElement | null
+    if (!treeGroup || !treeGroup.classList.contains("owned")) return "hand"
+    const tag = (target as Element).tagName?.toLowerCase()
+    if (tag === "rect") return mouseDown ? "can-pour" : "can"
+    if (tag === "path") return "shears"
+    return "hand"
 }
 
 // Local mousemove → SVG coordinates → throttled send.
-let pendingCursor: { x: number; y: number } | null = null
+let pendingCursor: { x: number; y: number; tool: CursorTool } | null = null
 let cursorRafScheduled = false
 function handleMouseMove(ev: MouseEvent) {
     if (!planterSvg) return
@@ -662,21 +712,31 @@ function handleMouseMove(ev: MouseEvent) {
     pt.x = ev.clientX
     pt.y = ev.clientY
     const svgPt = pt.matrixTransform(ctm.inverse())
-    pendingCursor = { x: svgPt.x, y: svgPt.y }
+    pendingCursor = { x: svgPt.x, y: svgPt.y, tool: toolFromEvent(ev) }
     if (!cursorRafScheduled) {
         cursorRafScheduled = true
         requestAnimationFrame(() => {
             cursorRafScheduled = false
             if (pendingCursor) {
-                net.sendCursor(pendingCursor.x, pendingCursor.y, true)
+                net.sendCursor(pendingCursor)
                 pendingCursor = null
             }
         })
     }
 }
 window.addEventListener("mousemove", handleMouseMove)
+window.addEventListener("mousedown", (ev) => {
+    if (ev.button !== 0) return
+    mouseDown = true
+    handleMouseMove(ev)
+})
+window.addEventListener("mouseup", (ev) => {
+    if (ev.button !== 0) return
+    mouseDown = false
+    handleMouseMove(ev)
+})
 window.addEventListener("mouseleave", () => {
-    net.sendCursor(0, 0, false)
+    net.sendCursor(null)
 })
 
 // Use myColor to tint the status pill text so players can tell apart two

@@ -60,16 +60,16 @@
         font-family: monospace;
       }
 
-      path:hover {
+      .owned path:hover {
         cursor: url(shears.png) 5 5, default;
       }
 
-      rect:hover {
+      .owned rect:hover {
         cursor: url(watering-can.png) 0 10, default;
       }
 
-      rect:active {
-        cursor: url(watering-can-rot.png) 0 10, default;
+      .owned rect:active {
+        cursor: url(watering-can-pour.png) 0 10, default;
       }
 
       text {
@@ -144,18 +144,33 @@
       }
       .remote-cursor {
         position: absolute;
-        transform: translate(-2px, -2px);
+        width: 32px;
+        height: 32px;
+        pointer-events: none;
+      }
+      .remote-cursor .icon {
+        position: absolute;
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+        object-position: top left;
+        filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.6));
+      }
+      .remote-cursor .ring {
+        position: absolute;
+        left: -4px;
+        top: -4px;
         width: 14px;
         height: 14px;
         border-radius: 50%;
-        border: 2px solid white;
+        border: 3px solid white;
+        box-sizing: border-box;
         box-shadow: 0 0 4px rgba(0, 0, 0, 0.6);
-        pointer-events: none;
       }
       .remote-cursor .label {
         position: absolute;
-        top: 16px;
-        left: 16px;
+        top: 24px;
+        left: 20px;
         font-family: 'Recursive', monospace;
         font-size: 11px;
         color: white;

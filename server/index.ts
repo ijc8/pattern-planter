@@ -257,18 +257,17 @@ function handleMessage(player: Player, msg: any) {
         case "cursor": {
             // Light validation; relay to everyone else. No rate-limiting here —
             // clients throttle before sending.
-            if (typeof msg.x !== "number" || typeof msg.y !== "number") return
-            broadcast(
-                {
-                    type: "cursor",
-                    playerId: player.id,
-                    color: player.color,
-                    x: msg.x,
-                    y: msg.y,
-                    visible: !!msg.visible,
-                },
-                player.id,
-            )
+            const relayed: any = {
+                type: "cursor",
+                playerId: player.id,
+                color: player.color,
+            }
+            if (typeof msg.x === "number" && typeof msg.y === "number") {
+                relayed.x = msg.x
+                relayed.y = msg.y
+                if (msg.tool === "can" || msg.tool === "can-pour" || msg.tool === "shears") relayed.tool = msg.tool
+            }
+            broadcast(relayed, player.id)
             return
         }
     }

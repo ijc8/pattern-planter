@@ -4,6 +4,8 @@
 
 import type { Intent, Tree } from "./shared/apply"
 
+export type CursorTool = "hand" | "can" | "can-pour" | "shears"
+
 export interface HelloSnapshot {
     trees: Tree[]
     claims: (string | null)[]
@@ -17,7 +19,7 @@ export interface Handlers {
     onClaimUpdate?(treeIndex: number, ownerId: string | null): void
     onClaimResult?(treeIndex: number, ok: boolean, reason?: string): void
     onIntent?(intent: Intent, senderId: string): void
-    onCursor?(playerId: string, color: string, x: number, y: number, visible: boolean): void
+    onCursor?(playerId: string, color: string, pos: { x: number; y: number; tool: CursorTool } | null): void
     onStatusChange?(status: "connecting" | "open" | "closed"): void
 }
 
@@ -80,9 +82,13 @@ export class Net {
             case "intent":
                 this.handlers.onIntent?.(msg.intent, msg.senderId)
                 return
-            case "cursor":
-                this.handlers.onCursor?.(msg.playerId, msg.color, msg.x, msg.y, !!msg.visible)
+            case "cursor": {
+                const pos = typeof msg.x === "number" && typeof msg.y === "number"
+                    ? { x: msg.x, y: msg.y, tool: (msg.tool ?? "hand") as CursorTool }
+                    : null
+                this.handlers.onCursor?.(msg.playerId, msg.color, pos)
                 return
+            }
         }
     }
 
@@ -104,7 +110,13 @@ export class Net {
     sendIntent(intent: Intent) {
         this.send({ type: "intent", intent })
     }
-    sendCursor(x: number, y: number, visible: boolean) {
-        this.send({ type: "cursor", x, y, visible })
+    sendCursor(pos: { x: number; y: number; tool: CursorTool } | null) {
+        const msg: any = { type: "cursor" }
+        if (pos) {
+            msg.x = pos.x
+            msg.y = pos.y
+            if (pos.tool !== "hand") msg.tool = pos.tool
+        }
+        this.send(msg)
     }
 }
