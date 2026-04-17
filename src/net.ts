@@ -4,7 +4,7 @@
 
 import type { Intent, Tree } from "./shared/apply"
 
-export type CursorTool = "hand" | "can" | "can-pour" | "shears"
+export type CursorTool = "hand" | "can" | "can-pour" | "shears" | "shears-closed"
 
 export interface HelloSnapshot {
     trees: Tree[]

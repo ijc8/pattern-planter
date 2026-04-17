@@ -265,7 +265,7 @@ function handleMessage(player: Player, msg: any) {
             if (typeof msg.x === "number" && typeof msg.y === "number") {
                 relayed.x = msg.x
                 relayed.y = msg.y
-                if (msg.tool === "can" || msg.tool === "can-pour" || msg.tool === "shears") relayed.tool = msg.tool
+                if (msg.tool === "can" || msg.tool === "can-pour" || msg.tool === "shears" || msg.tool === "shears-closed") relayed.tool = msg.tool
             }
             broadcast(relayed, player.id)
             return

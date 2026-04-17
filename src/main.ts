@@ -49,6 +49,7 @@ const CURSOR_ICONS: Record<CursorTool, { src: string; hx: number; hy: number }> 
     can:       { src: "/watering-can.png",     hx: 0, hy: 10 },
     "can-pour": { src: "/watering-can-pour.png", hx: 0, hy: 10 },
     shears:    { src: "/shears.png",           hx: 5, hy: 5 },
+    "shears-closed": { src: "/shears-closed.png", hx: 5, hy: 5 },
 }
 
 // Emoji mapping for tree nodes
@@ -697,7 +698,7 @@ function toolFromEvent(ev: MouseEvent): CursorTool {
     if (!treeGroup || !treeGroup.classList.contains("owned")) return "hand"
     const tag = (target as Element).tagName?.toLowerCase()
     if (tag === "rect") return mouseDown ? "can-pour" : "can"
-    if (tag === "path") return "shears"
+    if (tag === "path") return mouseDown ? "shears-closed" : "shears"
     return "hand"
 }
 
