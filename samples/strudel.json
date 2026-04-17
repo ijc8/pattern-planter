@@ -1,0 +1,33 @@
+{
+  "_base": "/samples/",
+  "piano": {
+    "C2": "piano/C2v8.mp3",
+    "Ds2": "piano/Ds2v8.mp3",
+    "Fs2": "piano/Fs2v8.mp3",
+    "A2": "piano/A2v8.mp3",
+    "C3": "piano/C3v8.mp3",
+    "Ds3": "piano/Ds3v8.mp3",
+    "Fs3": "piano/Fs3v8.mp3",
+    "A3": "piano/A3v8.mp3"
+  },
+  "folkharp": {
+    "C2": "VCSL/Chordophones/Composite Chordophones/Folk Harp/EWHarp_Normal_C2_v3_RR1.wav"
+  },
+  "didgeridoo": ["VCSL/Aerophones/Lip Aerophones/Didgeridoo/Didgeridoo1_Bark1_Main_rr3.wav"],
+  "guiro": ["VCSL/Idiophones/Struck Idiophones/Guiro/Guiro_Fast_rr1_Mid.wav"],
+  "sleighbells": ["VCSL/Idiophones/Struck Idiophones/Sleigh Bells/Sleighbells_Hit_rr1_Mid.wav"],
+  "psaltery_pluck": {
+    "A#3": "VCSL/Chordophones/Zithers/Psaltery, Bowed and Plucked/Pluck/BowedPsaltery_A#3_Main_Pluck_rr1.wav"
+  },
+  "ocarina_small_stacc": {
+    "A4": "VCSL/Aerophones/Edge-blown Aerophones/Ocarina, Small/Staccato/ocarina_A4_staccato0.wav"
+  },
+  "crow": ["Dirt-Samples/crow/000_crow.wav"],
+  "insect": [
+    "Dirt-Samples/insect/000_everglades_conehead.wav",
+    "Dirt-Samples/insect/000_everglades_conehead.wav",
+    "Dirt-Samples/insect/002_seashore_meadow_katydid.wav"
+  ],
+  "wind": ["Dirt-Samples/wind/000_wind1.wav"],
+  "east": ["Dirt-Samples/east/000_nipon_wood_block.wav"]
+}

@@ -8,7 +8,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `npm run build` — TypeScript compilation + Vite build (`tsc && vite build`)
 - `npm run start` — Build + start the WebSocket server (serves built client)
 - `npm run server` — Start the server without rebuilding
-- `npm run setup-samples` — Download audio samples (~100MB) for offline/LAN use
 - `npm run preview` — Preview production build via Vite
 
 No test runner or linter is configured. Verify with `npx tsc --noEmit` and `npm run build`.
@@ -75,7 +74,7 @@ Leaf nodes flash yellow when their sample/note triggers during playback:
 
 ### Local Sample Serving
 
-Strudel normally fetches samples from GitHub. For offline/LAN use, `main.ts` intercepts `fetch()` and redirects GitHub sample URLs to `/samples/` on the local server. The server serves from a `samples/` directory populated by `npm run setup-samples` (downloads only the ~120 files the app uses, ~100MB).
+Strudel's prebake normally fetches five sample registry JSONs from GitHub. `public/strudel.js` is patched (single string replace) so prebake instead loads one local file at `/samples/strudel.json` — a hand-rolled registry containing only the samples this app actually uses. The `samples/` directory (~7MB, checked in) holds that JSON plus the referenced audio files: 8 piano notes, 5 Dirt-Samples files, and 6 VCSL files. To add a new sample atom, add an entry to `samples/strudel.json` and copy the file out of the upstream `dough-samples` / `VCSL` / `Dirt-Samples` repo. For dict-keyed (note-indexed) VCSL samples, Strudel picks the key closest to MIDI 36 (C2) when no `.note()` is set, so that's the minimum you need to include.
 
 ### External Dependencies
 

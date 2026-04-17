@@ -12,8 +12,7 @@ in performance: https://www.youtube.com/watch?v=haphoJngHJ4
 
 ```sh
 npm install
-npm run setup-samples  # downloads ~100MB of audio samples
-npm run start          # builds client + starts server on http://localhost:8080
+npm run start  # builds client + starts server on http://localhost:8080
 ```
 
 For local development (Vite dev server with hot reload, no networking):
@@ -33,7 +32,7 @@ multiple players can each claim and tend one of the 8 trees in real-time.
   client).
 - All clients produce audio independently; plug one into the PA for the
   audience.
-- Designed for LAN use (works offline once samples are downloaded). Use
-  `ngrok` or similar if internet access is needed.
+- Designed for LAN use (works offline — samples are bundled in the repo).
+  Use `ngrok` or similar if internet access is needed.
 
 demo link coming soon.
