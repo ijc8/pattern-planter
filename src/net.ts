@@ -13,13 +13,15 @@ export interface HelloSnapshot {
 }
 
 export interface Handlers {
-    onHello?(playerId: string, color: string, snapshot: HelloSnapshot): void
+    // `color` is null until the player claims their first tree (server defers
+    // palette assignment so spectator clients don't consume a slot).
+    onHello?(playerId: string, color: string | null, snapshot: HelloSnapshot): void
     onPlayerJoin?(playerId: string, color: string): void
     onPlayerLeave?(playerId: string): void
     onClaimUpdate?(treeIndex: number, ownerId: string | null): void
     onClaimResult?(treeIndex: number, ok: boolean, reason?: string): void
     onIntent?(intent: Intent, senderId: string): void
-    onCursor?(playerId: string, color: string, pos: { x: number; y: number; tool: CursorTool } | null): void
+    onCursor?(playerId: string, color: string | null, pos: { x: number; y: number; tool: CursorTool } | null): void
     onStatusChange?(status: "connecting" | "open" | "closed"): void
 }
 

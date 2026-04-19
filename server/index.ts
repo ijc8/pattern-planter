@@ -30,13 +30,32 @@ const PORT = Number(process.env.PORT ?? 8080)
 
 interface Player {
     id: string
-    color: string
+    // Null until the player claims their first tree. Spectator-only clients
+    // therefore never consume a palette slot.
+    color: string | null
     ws: WebSocket
 }
+
+// Hand-picked palette: 8 cool/warm hues that read against the green/yellow/
+// orange background video. NUM_TREES === PALETTE.length, so as long as a slot
+// is held for the player's whole session, claim availability is the limiting
+// factor (8 trees → at most 8 simultaneous claimants → at most 8 slots).
+const PALETTE: string[] = [
+    "hsl(0, 80%, 60%)",     // red
+    "hsl(340, 85%, 65%)",   // pink
+    "hsl(310, 75%, 60%)",   // magenta
+    "hsl(280, 65%, 60%)",   // purple
+    "hsl(245, 70%, 65%)",   // indigo
+    "hsl(215, 80%, 60%)",   // blue
+    "hsl(195, 85%, 55%)",   // cyan
+    "hsl(170, 65%, 45%)",   // teal
+]
 
 const trees: Tree[] = Array.from({ length: NUM_TREES }, (_, i) => newTree(i))
 const claims: (string | null)[] = Array.from({ length: NUM_TREES }, () => null)
 const players = new Map<string, Player>()
+// paletteOwners[i] = id of the player holding palette slot i (or null).
+const paletteOwners: (string | null)[] = Array.from({ length: PALETTE.length }, () => null)
 
 function randomId(len = 6): string {
     const chars = "abcdefghjkmnpqrstuvwxyz23456789"
@@ -45,19 +64,31 @@ function randomId(len = 6): string {
     return out
 }
 
-// Deterministic-ish vivid color derived from the player id.
-function colorFor(id: string): string {
-    let h = 0
-    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
-    const hue = Math.abs(h) % 360
-    return `hsl(${hue}, 80%, 55%)`
+function allocatePaletteSlot(playerId: string): string | null {
+    for (let i = 0; i < paletteOwners.length; i++) {
+        if (paletteOwners[i] === null) {
+            paletteOwners[i] = playerId
+            return PALETTE[i]
+        }
+    }
+    return null
+}
+
+function freePaletteSlot(playerId: string) {
+    for (let i = 0; i < paletteOwners.length; i++) {
+        if (paletteOwners[i] === playerId) paletteOwners[i] = null
+    }
 }
 
 function snapshot() {
     return {
         trees,
         claims,
-        players: Array.from(players.values(), (p) => ({ id: p.id, color: p.color })),
+        // Only colored players are surfaced to peers; uncolored connections are
+        // pure spectators until they claim.
+        players: Array.from(players.values())
+            .filter((p) => p.color !== null)
+            .map((p) => ({ id: p.id, color: p.color! })),
     }
 }
 
@@ -174,14 +205,14 @@ wss.on("close", () => clearInterval(heartbeat))
 
 wss.on("connection", (ws) => {
     const id = randomId()
-    const color = colorFor(id)
-    const player: Player = { id, color, ws }
+    const player: Player = { id, color: null, ws }
     players.set(id, player)
     alive.set(ws, Date.now())
     console.log(`[join] ${id} (${players.size} total)`)
 
-    send(ws, { type: "hello", playerId: id, color, snapshot: snapshot() })
-    broadcast({ type: "player-join", playerId: id, color }, id)
+    // Color is null until first claim. We defer the player-join broadcast
+    // accordingly, so peers don't track colorless spectators.
+    send(ws, { type: "hello", playerId: id, color: null, snapshot: snapshot() })
 
     ws.on("pong", () => {
         alive.set(ws, Date.now())
@@ -202,13 +233,18 @@ wss.on("connection", (ws) => {
     ws.on("close", () => {
         alive.delete(ws)
         players.delete(id)
+        freePaletteSlot(id)
         for (let i = 0; i < NUM_TREES; i++) {
             if (claims[i] === id) {
                 claims[i] = null
                 broadcast({ type: "claim-update", treeIndex: i, ownerId: null })
             }
         }
-        broadcast({ type: "player-leave", playerId: id })
+        // Only announce leave for players we'd previously announced via
+        // player-join (i.e., those who got a color).
+        if (player.color !== null) {
+            broadcast({ type: "player-leave", playerId: id })
+        }
         console.log(`[leave] ${id} (${players.size} total)`)
     })
 })
@@ -221,6 +257,19 @@ function handleMessage(player: Player, msg: any) {
             if (claims[ti] !== null) {
                 send(player.ws, { type: "claim-result", treeIndex: ti, ok: false, reason: "already-claimed" })
                 return
+            }
+            // First claim of the session → take a palette slot. Held until
+            // disconnect so the player's identity color is stable.
+            if (player.color === null) {
+                const allocated = allocatePaletteSlot(player.id)
+                if (allocated === null) {
+                    send(player.ws, { type: "claim-result", treeIndex: ti, ok: false, reason: "no-color-slot" })
+                    return
+                }
+                player.color = allocated
+                // Announce to all (including self) so clients update playerColors
+                // before the claim-update arrives and triggers a tint.
+                broadcast({ type: "player-join", playerId: player.id, color: player.color })
             }
             claims[ti] = player.id
             send(player.ws, { type: "claim-result", treeIndex: ti, ok: true })

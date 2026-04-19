@@ -144,6 +144,8 @@ interface PointNode extends Tree {
 
 // Ownership + player state (populated via Net callbacks).
 let myPlayerId: string | null = null
+// Initialized to white; replaced when the server allocates our palette slot
+// on first claim (delivered via player-join with our own id).
 let myColor: string = "white"
 const ownedTrees = new Set<number>()
 const claimOwners: (string | null)[] = Array.from({ length: NUM_TREES }, () => null)
@@ -320,13 +322,12 @@ function setupTree() {
 
             nodeEnter.append('rect')
                 .attr('class', 'node')
+                .attr('data-id', (d: d3.HierarchyPointNode<any>) => d.data.id)
                 .attr("width", rectWidth)
                 .attr("height", rectHeight)
                 .attr("x", 0)
                 .attr("y", (rectHeight/2)*-1)
                 .attr("rx","5")
-                .style("fill", (d: d3.HierarchyPointNode<any>) => d.data.fill)
-                .style("stroke", "black")
 
             // Add labels for the nodes
             nodeEnter.append('text')
@@ -385,8 +386,7 @@ function setupTree() {
             const linkEnter = link.enter().insert('path', "g")
                 .attr("class", "link")
                 .on("click", clickLink)
-                .attr("stroke", "black")
-                .attr("stroke-width", 3)
+                .attr("stroke-width", 6)
                 .attr('d', (d: d3.HierarchyPointNode<PointNode>) => {
                     const parent = d.parent!;
                     const o = { x: parent.data.x0 ?? 0, y: parent.data.y0 ?? 0 }
@@ -435,15 +435,19 @@ function setupTree() {
 }
 
 function updateTreeColors(root: d3.HierarchyNode<PointNode>, treeIndex: number) {
-    const group = d3.select(`#tree-${treeIndex}`)
+    // Tint is driven by the `--tree-tint` CSS variable on the tree's <g> (set
+    // in syncTreeOwnedClass). Here we only toggle the `.active` class for
+    // highlights. Look up rects by `data-id` rather than via d3's bound
+    // __data__, which can be stale: d3 does not re-propagate parent data to
+    // child rects when the hierarchy is rebuilt from a new Tree JSON object.
+    const group = document.getElementById(`tree-${treeIndex}`)
+    if (!group) return
     root.descendants().forEach(node => {
         const isLeaf = !node.children || node.children.length === 0
-        if (isLeaf && node.data.id) {
-            node.data.fill = activeAtoms.has(node.data.id) ? "yellow" : "white"
-        }
+        const active = isLeaf && activeAtoms.has(node.data.id)
+        const rect = group.querySelector(`rect.node[data-id="${node.data.id}"]`)
+        if (rect) rect.classList.toggle("active", active)
     })
-    group.selectAll<SVGRectElement, d3.HierarchyPointNode<PointNode>>('rect.node')
-        .style("fill", d => d.data.fill)
 }
 
 ;(window as any).highlightAtoms = function(tags: any[]) {
@@ -527,6 +531,10 @@ function syncTreeOwnedClass(treeIndex: number) {
     const g = document.getElementById(`tree-${treeIndex}`)
     if (!g) return
     g.classList.toggle("owned", ownedTrees.has(treeIndex))
+    const ownerId = claimOwners[treeIndex]
+    const color = ownerId ? playerColors.get(ownerId) : null
+    if (color) g.style.setProperty("--tree-tint", `color-mix(in srgb, ${color} 25%, white)`)
+    else g.style.removeProperty("--tree-tint")
 }
 
 const wsUrl = (() => {
@@ -537,14 +545,26 @@ const wsUrl = (() => {
 const net = new Net(wsUrl, {
     onHello(playerId, color, snapshot) {
         myPlayerId = playerId
-        myColor = color
-        playerColors.set(playerId, color)
+        if (color) {
+            myColor = color
+            playerColors.set(playerId, color)
+        }
         for (const p of snapshot.players) playerColors.set(p.id, p.color)
         replaceAllTrees(snapshot)
         renderClaimBar()
     },
     onPlayerJoin(playerId, color) {
         playerColors.set(playerId, color)
+        if (playerId === myPlayerId) {
+            myColor = color
+            updateStatusPillColor()
+        }
+        // Re-tint any trees this player already owns (claim-update may have
+        // arrived first if a stale ordering ever occurs).
+        for (let i = 0; i < NUM_TREES; i++) {
+            if (claimOwners[i] === playerId) syncTreeOwnedClass(i)
+        }
+        renderClaimBar()
     },
     onPlayerLeave(playerId) {
         playerColors.delete(playerId)
@@ -625,28 +645,26 @@ function renderClaimBar() {
 interface RemoteCursorEls {
     wrap: HTMLDivElement
     icon: HTMLImageElement
-    ring: HTMLDivElement
     tool: CursorTool | null
 }
 const remoteCursorEls = new Map<string, RemoteCursorEls>()
 
-function getRemoteCursorEl(playerId: string, color: string): RemoteCursorEls {
+function getRemoteCursorEl(playerId: string, color: string | null): RemoteCursorEls {
     let entry = remoteCursorEls.get(playerId)
     if (!entry) {
         const wrap = document.createElement("div")
         wrap.className = "remote-cursor"
+        if (color) wrap.style.setProperty("--cursor-color", color)
         const icon = document.createElement("img")
         icon.className = "icon"
-        const ring = document.createElement("div")
-        ring.className = "ring"
-        ring.style.borderColor = color
-        const label = document.createElement("span")
-        label.className = "label"
-        label.textContent = playerId
-        wrap.append(icon, ring, label)
+        wrap.append(icon)
         document.getElementById("cursors")!.append(wrap)
-        entry = { wrap, icon, ring, tool: null }
+        entry = { wrap, icon, tool: null }
         remoteCursorEls.set(playerId, entry)
+    } else if (color && entry.wrap.style.getPropertyValue("--cursor-color") !== color) {
+        // Color may arrive after the cursor element was created (e.g. spectator
+        // claimed mid-session). Update so the halo lights up.
+        entry.wrap.style.setProperty("--cursor-color", color)
     }
     return entry
 }
@@ -663,7 +681,7 @@ function removeRemoteCursor(playerId: string) {
 // via the root SVG's viewBox). Convert to client pixels using the SVG's
 // current screen CTM, then position the cursor div so its hotspot (per the
 // tool icon) lands at the reported point.
-function updateRemoteCursor(playerId: string, color: string, pos: { x: number; y: number; tool: CursorTool } | null) {
+function updateRemoteCursor(playerId: string, color: string | null, pos: { x: number; y: number; tool: CursorTool } | null) {
     if (!pos) {
         removeRemoteCursor(playerId)
         return
@@ -740,12 +758,27 @@ window.addEventListener("mouseleave", () => {
     net.sendCursor(null)
 })
 
-// Use myColor to tint the status pill text so players can tell apart two
-// browser tabs at a glance.
-document.addEventListener("DOMContentLoaded", () => {
+// Tint the status pill border with the local player's color. Called both at
+// startup (myColor === "white" until the server allocates a slot on first
+// claim) and again whenever myColor changes.
+function updateStatusPillColor() {
     const pill = document.getElementById("status-pill")
     if (pill) pill.style.borderLeft = `6px solid ${myColor}`
-})
+}
+document.addEventListener("DOMContentLoaded", updateStatusPillColor)
+
+// Spectator mode: hides the claim bar so a projector-connected laptop shows
+// only the trees. Persisted to localStorage.
+const spectatorInput = document.querySelector<HTMLInputElement>("#spectator-toggle input")
+if (spectatorInput) {
+    const initial = localStorage.getItem("spectator") === "1"
+    spectatorInput.checked = initial
+    document.body.classList.toggle("spectator", initial)
+    spectatorInput.addEventListener("change", () => {
+        document.body.classList.toggle("spectator", spectatorInput.checked)
+        localStorage.setItem("spectator", spectatorInput.checked ? "1" : "0")
+    })
+}
 
 // Filter out silence marker
 const samplesToLoad = SAMPLE_ATOMS.filter(s => s !== "~")
